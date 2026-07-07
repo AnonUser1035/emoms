@@ -1,0 +1,18 @@
+name = "emoms-checkin"
+main = "src/index.ts"
+compatibility_date = "2026-07-07"
+
+# Origin allow-list for CORS.
+[vars]
+ALLOWED_ORIGINS = "https://emoms.ryanbohluli.com,http://localhost:3001"
+# Fixed IANA timezone used to compute "today" for every check-in and every
+# heatmap read, regardless of visitor location — see design.md.
+CHECKIN_TIMEZONE = "America/New_York"
+
+# Create once: cd worker && npx wrangler d1 create emoms-checkins
+# then paste the printed database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "emoms-checkins"
+database_id = "3908775d-3538-430f-9b71-5adc85b17074"
+migrations_dir = "migrations"
