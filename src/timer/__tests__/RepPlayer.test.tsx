@@ -11,6 +11,7 @@ const KEY = 'emoms.activeRun.v1';
 const twoTargets: RepWorkout = {
   mode: 'rep',
   slug: 'test-rep',
+  origin: 'original',
   title: 'Test Rep',
   summary: '',
   targets: [
@@ -22,6 +23,7 @@ const twoTargets: RepWorkout = {
 const capped: RepWorkout = {
   mode: 'rep',
   slug: 'test-capped',
+  origin: 'original',
   title: 'Test Capped',
   summary: '',
   targets: [{ movement: 'Pushups', count: 300 }],

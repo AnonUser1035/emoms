@@ -8,7 +8,7 @@ import type { Block, EmomWorkout, Segment, Station } from './workouts';
 
 /** Seconds a station occupies within a block (hold = its own length). */
 function stationSeconds(station: Station, defaultInterval: number): number {
-  if (station.measure.kind === 'hold') return station.measure.seconds;
+  if (station.measure?.kind === 'hold') return station.measure.seconds;
   return station.interval ?? defaultInterval;
 }
 

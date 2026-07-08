@@ -19,6 +19,7 @@ describe('expand()', () => {
     const w: EmomWorkout = {
       mode: 'emom',
       slug: 't',
+      origin: 'original',
       title: 't',
       summary: '',
       blocks: [{ durationMin: 10, intervalSec: 60, stations: [A, B] }],
@@ -42,6 +43,7 @@ describe('expand()', () => {
     const w: EmomWorkout = {
       mode: 'emom',
       slug: 't',
+      origin: 'original',
       title: 't',
       summary: '',
       blocks: [{ durationMin: 10, intervalSec: 60, stations: [A, B, C] }],
@@ -66,6 +68,7 @@ describe('expand()', () => {
     const w: EmomWorkout = {
       mode: 'emom',
       slug: 't',
+      origin: 'original',
       title: 't',
       summary: '',
       blocks: [
@@ -96,6 +99,7 @@ describe('expand()', () => {
     const w: EmomWorkout = {
       mode: 'emom',
       slug: 't',
+      origin: 'original',
       title: 't',
       summary: '',
       blocks: [
@@ -115,6 +119,7 @@ describe('expand()', () => {
     const w: EmomWorkout = {
       mode: 'emom',
       slug: 't',
+      origin: 'original',
       title: 't',
       summary: '',
       blocks: [
@@ -134,6 +139,7 @@ describe('expand()', () => {
     const w: EmomWorkout = {
       mode: 'emom',
       slug: 't',
+      origin: 'original',
       title: 't',
       summary: '',
       blocks: [

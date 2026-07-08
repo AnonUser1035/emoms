@@ -19,6 +19,7 @@ import {
   setActiveRunId,
   type ActiveRunSnapshot,
 } from './activeRun';
+import { dailyPick } from './dailyPick';
 import EmomPlayer from './EmomPlayer';
 import { expand } from './expand';
 import FinishScreen, { type FinishedRun } from './FinishScreen';
@@ -59,8 +60,11 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
   const [stale, setStale] = useState<ActiveRunSnapshot | null>(() =>
     restored && isStaleActiveRun(restored) ? restored : null,
   );
+  // Today's EMOM — computed once at mount; featured (default-selected,
+  // badged), never forced, and a restored snapshot always wins.
+  const [daily] = useState(() => dailyPick(workouts, new Date()));
   const [workout, setWorkout] = useState<Workout>(
-    () => getWorkout(restored?.slug ?? '') ?? workouts[0],
+    () => getWorkout(restored?.slug ?? '') ?? daily,
   );
   const [finished, setFinished] = useState<FinishedRun | null>(null);
 
@@ -216,6 +220,7 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
                   : 'bg-bg-elevated text-fg-muted hover:text-fg'
               }`}
             >
+              {w.slug === daily.slug ? '★ ' : ''}
               {w.title}
             </button>
           ))}
@@ -224,7 +229,25 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
 
       <div className="flex flex-col gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">{workout.title}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-bold tracking-tight">
+              {workout.title}
+            </h2>
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                workout.origin === 'original'
+                  ? 'bg-bg-elevated text-fg-muted'
+                  : 'border border-border text-fg-muted'
+              }`}
+            >
+              {workout.origin === 'original' ? 'DR original' : 'Generated'}
+            </span>
+            {workout.slug === daily.slug && (
+              <span className="rounded-full bg-work px-2.5 py-0.5 text-xs font-bold text-black">
+                ★ Today's EMOM
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-fg-muted">{workout.summary}</p>
         </div>
 
@@ -265,18 +288,38 @@ function EmomOverview({ workout }: { workout: EmomWorkout }) {
             </span>
           </div>
           <ul className="mt-3 flex flex-col gap-1.5">
-            {block.stations.map((s, si) => (
-              <li
-                key={si}
-                className="flex items-baseline justify-between gap-4 text-sm"
-              >
-                <span>{s.movement}</span>
-                <span className="text-fg-muted">
-                  {measureLabel(s.measure)}
-                  {s.load ? ` · ${s.load}` : ''}
-                </span>
-              </li>
-            ))}
+            {block.stations.map((s, si) =>
+              s.circuit ? (
+                <li key={si} className="text-sm">
+                  <span>{s.movement}</span>
+                  <ul className="mt-1 flex flex-col gap-1 pl-4">
+                    {s.circuit.map((p, pi) => (
+                      <li
+                        key={pi}
+                        className="flex items-baseline justify-between gap-4 text-fg-muted"
+                      >
+                        <span>{p.movement}</span>
+                        <span>
+                          {p.measure ? measureLabel(p.measure) : ''}
+                          {p.load ? ` · ${p.load}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ) : (
+                <li
+                  key={si}
+                  className="flex items-baseline justify-between gap-4 text-sm"
+                >
+                  <span>{s.movement}</span>
+                  <span className="text-fg-muted">
+                    {measureLabel(s.measure)}
+                    {s.load ? ` · ${s.load}` : ''}
+                  </span>
+                </li>
+              ),
+            )}
             {block.then?.map((t, ti) => (
               <li
                 key={`t${ti}`}
@@ -290,7 +333,9 @@ function EmomOverview({ workout }: { workout: EmomWorkout }) {
                 ) : (
                   <>
                     <span>{t.station.movement}</span>
-                    <span>{measureLabel(t.station.measure)}</span>
+                    <span>
+                      {t.station.measure ? measureLabel(t.station.measure) : ''}
+                    </span>
                   </>
                 )}
               </li>

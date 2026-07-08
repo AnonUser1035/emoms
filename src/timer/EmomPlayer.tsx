@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { EmomWorkout, Segment } from './workouts';
 import type { AudioCues } from './audio';
@@ -106,6 +106,39 @@ export default function EmomPlayer({
     }
   }, [running, clock.segmentIndex, clock.segmentRemaining, cues]);
 
+  // Circuit checklist: a per-segment memory aid, never a gate — the clock
+  // ends the segment regardless, and every new segment starts unchecked.
+  const [checked, setChecked] = useState<ReadonlySet<number>>(new Set());
+  useEffect(() => {
+    setChecked(new Set());
+  }, [clock.segmentIndex]);
+  const togglePart = (i: number) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  // Soft pacing tick at whole minutes inside circuit segments only — the
+  // loud start beep and 3-2-1 stay reserved for segment boundaries. Keyed on
+  // the minute *number* (not an exact elapsed value) so a dropped or
+  // coalesced render never swallows a tick, and a throttled tab that jumps
+  // forward re-syncs with a single tick for the current minute.
+  const lastTick = useRef('');
+  useEffect(() => {
+    if (!running || !station?.circuit) return;
+    const minute = Math.floor(clock.segmentElapsed / 60);
+    if (minute >= 1) {
+      const tag = `${clock.segmentIndex}:${minute}`;
+      if (lastTick.current !== tag) {
+        lastTick.current = tag;
+        cues.tick();
+      }
+    }
+  }, [running, clock.segmentIndex, clock.segmentElapsed, station, cues]);
+
   // End-of-workout: flourish + a single onComplete call, guarded against
   // re-firing on re-render.
   const completedFired = useRef(false);
@@ -167,16 +200,44 @@ export default function EmomPlayer({
         {mmss(clock.segmentRemaining)}
       </div>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex w-full flex-col items-center gap-1">
         {station ? (
-          <>
-            <p className="text-3xl font-bold">{station.movement}</p>
-            <p className="text-lg text-fg-muted">
-              {measureLabel(station.measure)}
-              {station.load ? ` · ${station.load}` : ''}
-            </p>
-            {pace && <p className="text-sm text-fg-muted">{pace}</p>}
-          </>
+          station.circuit ? (
+            <div className="flex w-full max-w-sm flex-col gap-1.5">
+              {station.circuit.map((part, i) => {
+                const done = checked.has(i);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => togglePart(i)}
+                    aria-pressed={done}
+                    className={`flex items-baseline justify-between gap-4 rounded-xl bg-bg-elevated px-4 py-3 text-left text-lg font-semibold transition-colors ${
+                      done ? 'text-fg-muted line-through' : ''
+                    }`}
+                  >
+                    <span>
+                      {done ? '✓ ' : ''}
+                      {part.movement}
+                    </span>
+                    <span className="shrink-0 text-sm font-normal text-fg-muted">
+                      {part.measure ? measureLabel(part.measure) : ''}
+                      {part.load ? ` · ${part.load}` : ''}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              <p className="text-3xl font-bold">{station.movement}</p>
+              <p className="text-lg text-fg-muted">
+                {measureLabel(station.measure)}
+                {station.load ? ` · ${station.load}` : ''}
+              </p>
+              {pace && <p className="text-sm text-fg-muted">{pace}</p>}
+            </>
+          )
         ) : (
           <p className="text-3xl font-bold">Rest</p>
         )}

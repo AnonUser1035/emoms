@@ -50,6 +50,12 @@ export class AudioCues {
     this.tone(660, 120);
   }
 
+  /** Soft pacing tick at whole minutes inside a circuit segment — quieter
+   *  and lower than everything else so it reads as a nudge, not an event. */
+  tick(): void {
+    this.tone(520, 90, 0.07);
+  }
+
   /** Higher, longer tone marking the start of a new segment. */
   start(): void {
     this.tone(880, 260, 0.2);

@@ -18,6 +18,8 @@ export function measureLabel(measure: Measure): string {
       return measure.meters
         ? `${measure.count} cal · ${measure.meters}m`
         : `${measure.count} cal`;
+    case 'dist':
+      return `${measure.meters} m`;
     case 'hold':
       return `${measure.seconds} sec hold`;
   }

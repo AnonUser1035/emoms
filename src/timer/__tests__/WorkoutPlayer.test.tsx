@@ -8,6 +8,7 @@ vi.mock('../workouts', () => {
     mode: 'emom',
     slug: 'tiny',
     title: 'Tiny',
+    origin: 'original',
     summary: 'One minute, one move.',
     blocks: [
       {
@@ -23,6 +24,7 @@ vi.mock('../workouts', () => {
     mode: 'rep',
     slug: 'tiny-rep',
     title: 'Tiny Rep',
+    origin: 'generated',
     summary: 'Five pushups.',
     targets: [{ movement: 'Pushups', count: 5 }],
   };
@@ -34,6 +36,8 @@ vi.mock('../workouts', () => {
 });
 
 import WorkoutPlayer from '../WorkoutPlayer';
+import workoutsList from '../workouts';
+import { dailyPick } from '../dailyPick';
 
 const KEY = 'emoms.activeRun.v1';
 const NAME_KEY = 'emoms.athleteName.v1';
@@ -42,6 +46,12 @@ async function clickFinish() {
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: /^finish$/i }));
   });
+}
+
+/** The default selection is now the daily pick — tests that need a specific
+ *  workout select its tab explicitly (tab labels may carry the daily ★). */
+function selectTinyEmom() {
+  fireEvent.click(screen.getByRole('tab', { name: /^(★ )?tiny$/i }));
 }
 
 describe('WorkoutPlayer', () => {
@@ -59,6 +69,7 @@ describe('WorkoutPlayer', () => {
     const onActivity = vi.fn();
     render(<WorkoutPlayer onActivity={onActivity} />);
 
+    selectTinyEmom();
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
     expect(window.localStorage.getItem(KEY)).not.toBeNull();
 
@@ -78,6 +89,7 @@ describe('WorkoutPlayer', () => {
   it('runs a second workout after finishing the first', async () => {
     render(<WorkoutPlayer />);
 
+    selectTinyEmom();
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
     act(() => {
       vi.advanceTimersByTime(65_000);
@@ -94,6 +106,7 @@ describe('WorkoutPlayer', () => {
   it('quitting mid-run clears the snapshot without a finish screen', () => {
     render(<WorkoutPlayer />);
 
+    selectTinyEmom();
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
     act(() => {
       vi.advanceTimersByTime(10_000);
@@ -172,6 +185,31 @@ describe('WorkoutPlayer', () => {
     fireEvent.click(screen.getByRole('button', { name: /resume/i }));
     // Way past the timeline end → lands straight on the finish screen.
     expect(screen.getByText(/tiny complete/i)).toBeDefined();
+  });
+
+  it('pre-selects the daily pick and badges it as today\'s EMOM', () => {
+    render(<WorkoutPlayer />);
+
+    const expected = dailyPick(workoutsList, new Date());
+    expect(
+      screen.getByRole('heading', { name: expected.title, level: 2 }),
+    ).toBeDefined();
+    expect(screen.getByText(/today's emom/i)).toBeDefined();
+    // The daily tab carries the star.
+    expect(
+      screen.getByRole('tab', { name: new RegExp(`^\u2605 ${expected.title}$`) }),
+    ).toBeDefined();
+  });
+
+  it('shows origin badges and lets the athlete switch freely', () => {
+    render(<WorkoutPlayer />);
+
+    selectTinyEmom();
+    expect(screen.getByText(/dr original/i)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('tab', { name: /tiny rep/i }));
+    expect(screen.getByText(/^generated$/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /start/i })).toBeDefined();
   });
 
   it('runs a rep workout end to end, capturing the whiteboard name once', async () => {

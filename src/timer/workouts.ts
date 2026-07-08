@@ -17,6 +17,8 @@ export type Measure =
   | { kind: 'perSide'; count: number }
   /** Machine calories, optionally with an equivalent distance in metres. */
   | { kind: 'cal'; count: number; meters?: number }
+  /** Machine distance, for erg work prescribed by metres rather than cals. */
+  | { kind: 'dist'; meters: number }
   /** Static hold, e.g. a 50-second plank. */
   | { kind: 'hold'; seconds: number };
 
@@ -26,9 +28,16 @@ export interface Pace {
   calPerMin?: number;
 }
 
-export interface Station {
+/** One exercise inside a circuit station. Bodyweight parts omit measure. */
+export interface CircuitPart {
   movement: string;
-  measure: Measure;
+  measure?: Measure;
+  load?: string;
+  notes?: string;
+}
+
+interface StationBase {
+  movement: string;
   /** Load cue shown inline, e.g. "45 lb". */
   load?: string;
   /** Override the block's default interval (seconds) for this station only. */
@@ -37,6 +46,25 @@ export interface Station {
   pace?: Pace;
   notes?: string;
 }
+
+/** The common case: one movement, one measure, one interval. */
+export interface MovementStation extends StationBase {
+  measure: Measure;
+  circuit?: never;
+}
+
+/**
+ * A circuit station: an ordered list of parts done at the athlete's pace
+ * inside one timed segment. Timing is identical to any other station (the
+ * interval clock neither knows nor cares); only the display differs — the
+ * parts render as a tappable checklist that never gates the clock.
+ */
+export interface CircuitStation extends StationBase {
+  circuit: CircuitPart[];
+  measure?: never;
+}
+
+export type Station = MovementStation | CircuitStation;
 
 /** A segment appended after a block's rotation, in authoring order. */
 export type Trailing =
@@ -57,11 +85,16 @@ export interface Block {
   then?: Trailing[];
 }
 
+/** Who made a workout: a David Rosen original, or generated/community.
+ *  Required so attribution can't be forgotten when authoring new entries. */
+export type WorkoutOrigin = 'original' | 'generated';
+
 export interface EmomWorkout {
   mode: 'emom';
   slug: string;
   title: string;
   summary: string;
+  origin: WorkoutOrigin;
   blocks: Block[];
 }
 
@@ -83,6 +116,7 @@ export interface RepWorkout {
   slug: string;
   title: string;
   summary: string;
+  origin: WorkoutOrigin;
   /** Worked through in order; a chipper has many, a rep-goal workout one. */
   targets: RepTarget[];
   /** Time cap in minutes. Absent → the workout runs until all targets done. */
@@ -131,6 +165,7 @@ export type Segment =
 const emom30: EmomWorkout = {
   mode: 'emom',
   slug: 'emom-30',
+  origin: 'original',
   title: 'EMOM 30',
   summary:
     'Three 10-minute blocks, one movement every minute, with a break and a plank between rounds.',
@@ -219,6 +254,7 @@ const round = (
 const chipper6030: RepWorkout = {
   mode: 'rep',
   slug: 'chipper-60-30',
+  origin: 'original',
   title: '60/30 Chipper',
   summary:
     'Six movements, 60 reps each, then 30 reps each — diamond pushups become regular in round two. For time.',
@@ -228,6 +264,7 @@ const chipper6030: RepWorkout = {
 const pushups300: RepWorkout = {
   mode: 'rep',
   slug: 'pushups-300',
+  origin: 'original',
   title: '300 Pushups',
   summary:
     '300 pushups or 35 minutes, whichever comes first. Every break: 15 goblet squats and 15 tuck jumps.',
@@ -239,7 +276,51 @@ const pushups300: RepWorkout = {
   ],
 };
 
-const workouts: Workout[] = [emom30, chipper6030, pushups300];
+// Six 5-minute cycles; each part paces to ~1 minute but only the 5:00
+// boundary is enforced (checklist display, minute ticks — see EmomPlayer).
+// Stations differ only in the erg, so rotation walks bike → ski → row twice.
+const CYCLE_BASE: CircuitPart[] = [
+  { movement: 'Dumbbell squats' },
+  { movement: 'Med ball throw downs' },
+  { movement: 'Situps' },
+  { movement: 'Pushups' },
+];
+
+const cycle = (name: string, erg: CircuitPart): Station => ({
+  movement: name,
+  circuit: [...CYCLE_BASE, erg],
+});
+
+const cycles6x5: EmomWorkout = {
+  mode: 'emom',
+  slug: 'cycles-6x5',
+  origin: 'original',
+  title: '6×5 Cycles',
+  summary:
+    'Six 5-minute cycles — squats, throw downs, situps, pushups, and a rotating erg. Each paces to about a minute; only the 5:00 matters.',
+  blocks: [
+    {
+      durationMin: 30,
+      intervalSec: 300,
+      stations: [
+        cycle('Cycle (bike)', {
+          movement: 'Assault bike',
+          measure: { kind: 'cal', count: 12 },
+        }),
+        cycle('Cycle (ski)', {
+          movement: 'Ski erg',
+          measure: { kind: 'dist', meters: 200 },
+        }),
+        cycle('Cycle (row)', {
+          movement: 'Row',
+          measure: { kind: 'dist', meters: 250 },
+        }),
+      ],
+    },
+  ],
+};
+
+const workouts: Workout[] = [emom30, chipper6030, pushups300, cycles6x5];
 
 export function getWorkout(slug: string): Workout | undefined {
   return workouts.find((w) => w.slug === slug);

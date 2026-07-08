@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import workouts, { getWorkout } from '../workouts';
+import { expand } from '../expand';
+import { measureLabel } from '../format';
 
 describe('workout registry', () => {
-  it('holds all three workouts, retrievable by slug', () => {
+  it('holds all four workouts, retrievable by slug', () => {
     expect(workouts.map((w) => w.slug)).toEqual([
       'emom-30',
       'chipper-60-30',
       'pushups-300',
+      'cycles-6x5',
     ]);
     for (const w of workouts) {
       expect(getWorkout(w.slug)).toBe(w);
@@ -17,6 +20,10 @@ describe('workout registry', () => {
   it('keeps emom-30 as an EMOM workout', () => {
     const w = getWorkout('emom-30');
     expect(w?.mode).toBe('emom');
+  });
+
+  it('attributes every workout, all four as David Rosen originals', () => {
+    expect(workouts.every((w) => w.origin === 'original')).toBe(true);
   });
 });
 
@@ -40,6 +47,49 @@ describe('60/30 chipper', () => {
     expect(w.targets.slice(1, 6).map((t) => t.movement)).toEqual(
       w.targets.slice(7).map((t) => t.movement),
     );
+  });
+});
+
+describe('6×5 cycles', () => {
+  const w = getWorkout('cycles-6x5');
+
+  it('expands to six 300-second circuit segments with ergs rotating twice', () => {
+    if (w?.mode !== 'emom') throw new Error('expected emom workout');
+    const segs = expand(w);
+    expect(segs).toHaveLength(6);
+    expect(segs.every((s) => s.durationSec === 300 && s.type === 'work')).toBe(
+      true,
+    );
+    const ergs = segs.map((s) =>
+      s.type === 'work' ? s.station.circuit?.at(-1)?.movement : '',
+    );
+    expect(ergs).toEqual([
+      'Assault bike',
+      'Ski erg',
+      'Row',
+      'Assault bike',
+      'Ski erg',
+      'Row',
+    ]);
+  });
+
+  it('every cycle shares the four bodyweight parts and a measured erg', () => {
+    if (w?.mode !== 'emom') throw new Error('expected emom workout');
+    for (const station of w.blocks[0].stations) {
+      const parts = station.circuit ?? [];
+      expect(parts.map((p) => p.movement).slice(0, 4)).toEqual([
+        'Dumbbell squats',
+        'Med ball throw downs',
+        'Situps',
+        'Pushups',
+      ]);
+      expect(parts[4].measure).toBeDefined();
+    }
+  });
+
+  it('labels distance measures in meters', () => {
+    expect(measureLabel({ kind: 'dist', meters: 200 })).toBe('200 m');
+    expect(measureLabel({ kind: 'dist', meters: 250 })).toBe('250 m');
   });
 });
 
