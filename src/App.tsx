@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { fetchHeatmap, postCheckin, type HeatmapDay } from './heatmap/api';
 import Heatmap from './heatmap/Heatmap';
-import EmomPlayer from './timer/EmomPlayer';
+import WorkoutPlayer from './timer/WorkoutPlayer';
 
 export default function App() {
   const [heatmap, setHeatmap] = useState<HeatmapDay[] | null>(null);
@@ -31,7 +31,7 @@ export default function App() {
         </p>
       </header>
 
-      <EmomPlayer onComplete={handleComplete} />
+      <WorkoutPlayer onComplete={handleComplete} />
 
       {heatmap && heatmap.length > 0 && <Heatmap days={heatmap} />}
     </div>

@@ -6,6 +6,7 @@ export type ClockStatus = 'idle' | 'running' | 'paused' | 'done';
 
 export interface ClockState {
   status: ClockStatus;
+  /** Begin playback, optionally partway in (resume from a restored run). */
   /** Index of the current segment (0-based; last segment when done). */
   segmentIndex: number;
   /** Seconds remaining in the current segment (ceil'd for display). */
@@ -16,7 +17,7 @@ export interface ClockState {
   totalElapsed: number;
   /** Total workout duration in seconds. */
   totalDuration: number;
-  start: () => void;
+  start: (atElapsedSec?: number) => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;
@@ -64,12 +65,23 @@ export function useIntervalClock(segments: Segment[]): ClockState {
     return () => window.clearTimeout(timer);
   }, [status, total]);
 
-  const start = useCallback(() => {
-    if (total === 0) return;
-    anchor.current = { ts: Date.now(), base: 0 };
-    setElapsed(0);
-    setStatus('running');
-  }, [total]);
+  const start = useCallback(
+    (atElapsedSec = 0) => {
+      if (total === 0) return;
+      const base = Math.max(0, atElapsedSec);
+      if (base >= total) {
+        // Restored past the end (e.g. the workout finished while the page
+        // was gone) — land directly on done.
+        setElapsed(total);
+        setStatus('done');
+        return;
+      }
+      anchor.current = { ts: Date.now(), base };
+      setElapsed(base);
+      setStatus('running');
+    },
+    [total],
+  );
 
   const pause = useCallback(() => {
     setStatus((prev) => {

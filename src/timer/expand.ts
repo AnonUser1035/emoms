@@ -4,7 +4,7 @@
 // All EMOM structure — rotation, per-station intervals, run-to-the-clock
 // partial rounds, trailing breaks/holds — is resolved here, deterministically.
 
-import type { Block, Segment, Station, Workout } from './workouts';
+import type { Block, EmomWorkout, Segment, Station } from './workouts';
 
 /** Seconds a station occupies within a block (hold = its own length). */
 function stationSeconds(station: Station, defaultInterval: number): number {
@@ -62,7 +62,7 @@ function expandBlock(block: Block, blockIndex: number): Segment[] {
   return segments;
 }
 
-/** Flatten a workout into the ordered timeline the timer plays. Pure. */
-export function expand(workout: Workout): Segment[] {
+/** Flatten an EMOM workout into the ordered timeline the timer plays. Pure. */
+export function expand(workout: EmomWorkout): Segment[] {
   return workout.blocks.flatMap((block, index) => expandBlock(block, index));
 }

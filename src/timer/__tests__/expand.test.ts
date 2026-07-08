@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Workout } from '../workouts';
+import type { EmomWorkout } from '../workouts';
 import workouts, { getWorkout } from '../workouts';
 import { expand } from '../expand';
 
@@ -8,7 +8,7 @@ const A = { movement: 'A', measure: { kind: 'reps', count: 1 } } as const;
 const B = { movement: 'B', measure: { kind: 'reps', count: 1 } } as const;
 const C = { movement: 'C', measure: { kind: 'reps', count: 1 } } as const;
 
-function movements(workout: Workout): string[] {
+function movements(workout: EmomWorkout): string[] {
   return expand(workout)
     .filter((s) => s.type === 'work')
     .map((s) => (s.type === 'work' ? s.station.movement : ''));
@@ -16,7 +16,8 @@ function movements(workout: Workout): string[] {
 
 describe('expand()', () => {
   it('expands a clean 2-station / 10-min block into 5 whole rounds', () => {
-    const w: Workout = {
+    const w: EmomWorkout = {
+      mode: 'emom',
       slug: 't',
       title: 't',
       summary: '',
@@ -38,7 +39,8 @@ describe('expand()', () => {
   });
 
   it('runs a 3-station / 10-min block to the clock (Option A partial round)', () => {
-    const w: Workout = {
+    const w: EmomWorkout = {
+      mode: 'emom',
       slug: 't',
       title: 't',
       summary: '',
@@ -61,7 +63,8 @@ describe('expand()', () => {
   });
 
   it('emits trailing break then hold in authoring order', () => {
-    const w: Workout = {
+    const w: EmomWorkout = {
+      mode: 'emom',
       slug: 't',
       title: 't',
       summary: '',
@@ -90,7 +93,8 @@ describe('expand()', () => {
   });
 
   it('honours a per-station interval override', () => {
-    const w: Workout = {
+    const w: EmomWorkout = {
+      mode: 'emom',
       slug: 't',
       title: 't',
       summary: '',
@@ -108,7 +112,8 @@ describe('expand()', () => {
   });
 
   it('does not emit a partial segment that overruns the block boundary', () => {
-    const w: Workout = {
+    const w: EmomWorkout = {
+      mode: 'emom',
       slug: 't',
       title: 't',
       summary: '',
@@ -126,7 +131,8 @@ describe('expand()', () => {
   });
 
   it('concatenates blocks into one continuous timeline', () => {
-    const w: Workout = {
+    const w: EmomWorkout = {
+      mode: 'emom',
       slug: 't',
       title: 't',
       summary: '',
@@ -141,13 +147,13 @@ describe('expand()', () => {
   });
 
   it('is deterministic', () => {
-    const w = getWorkout('emom-30') as Workout;
+    const w = getWorkout('emom-30') as EmomWorkout;
     expect(expand(w)).toEqual(expand(w));
   });
 });
 
 describe('seeded EMOM 30', () => {
-  const emom30 = getWorkout('emom-30') as Workout;
+  const emom30 = getWorkout('emom-30') as EmomWorkout;
 
   it('is present in the library', () => {
     expect(workouts.some((w) => w.slug === 'emom-30')).toBe(true);
