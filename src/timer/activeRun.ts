@@ -37,10 +37,27 @@ export type ActiveRunSnapshot =
 
 export function saveActiveRun(snapshot: ActiveRunSnapshot): void {
   try {
+    // The server run id arrives asynchronously after the snapshot is first
+    // written (and players re-save without knowing it). Once known for this
+    // run, it sticks — a save without one never erases it.
+    if (!snapshot.runId) {
+      const existing = loadActiveRun();
+      if (existing && existing.slug === snapshot.slug && existing.runId) {
+        snapshot = { ...snapshot, runId: existing.runId };
+      }
+    }
     window.localStorage.setItem(KEY, JSON.stringify(snapshot));
   } catch {
     // Storage unavailable (private mode, quota) — run just won't survive
     // a reload, which is the pre-snapshot behaviour.
+  }
+}
+
+/** Attach the server run id to the stored snapshot (slug-guarded). */
+export function setActiveRunId(slug: string, runId: string): void {
+  const existing = loadActiveRun();
+  if (existing && existing.slug === slug) {
+    saveActiveRun({ ...existing, runId });
   }
 }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { fetchHeatmap, postCheckin, type HeatmapDay } from './heatmap/api';
+import { fetchHeatmap, type HeatmapDay } from './heatmap/api';
 import Heatmap from './heatmap/Heatmap';
 import WorkoutPlayer from './timer/WorkoutPlayer';
 
@@ -15,10 +15,6 @@ export default function App() {
     loadHeatmap();
   }, [loadHeatmap]);
 
-  const handleComplete = useCallback(() => {
-    void postCheckin().then(loadHeatmap);
-  }, [loadHeatmap]);
-
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col gap-10 px-4 py-10">
       <header className="text-center">
@@ -31,7 +27,7 @@ export default function App() {
         </p>
       </header>
 
-      <WorkoutPlayer onComplete={handleComplete} />
+      <WorkoutPlayer onActivity={loadHeatmap} />
 
       {heatmap && heatmap.length > 0 && <Heatmap days={heatmap} />}
     </div>

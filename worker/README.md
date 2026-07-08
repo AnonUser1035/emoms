@@ -1,9 +1,12 @@
-# emoms checkin Worker (Cloudflare)
+# emoms runs Worker (Cloudflare)
 
-A tiny, **stateless** Worker backing the shared community heatmap: a single
-global, identity-free count of EMOM completions per day. No accounts, no
-per-user data — see `openspec/changes/spinout-emoms-app/` in the site repo
-for the full spec and design rationale.
+A tiny Worker that is the system of record for workout **runs**: a run is
+created when a workout starts (rendering as a half-filled day on the shared
+heatmap) and completed when it finishes. The heatmap and each workout's
+results whiteboard are both queries over the same `runs` table. Identity is
+gym-whiteboard trust — an optional display name plus a client-generated
+device id, stored verbatim, never verified. See
+`openspec/changes/add-run-lifecycle-whiteboard/` for the spec and design.
 
 Fully isolated from ankibot's Worker/KV — separate Cloudflare Worker script,
 separate D1 database, no shared bindings.
@@ -56,12 +59,29 @@ preflight.
 ## Request contract
 
 ```
-POST /checkin
-→ { "day": "2026-07-07", "count": 3 }
+POST /runs                       { slug, name?, deviceId? }
+→ { "runId": "<uuid>", "day": "2026-07-07" }
+
+POST /runs/:id/complete          { slug, durationSec, totalReps?, breaks?,
+                                   completedAll, name?, deviceId?, notes? }
+→ { "runId": "<id>", "day": "2026-07-07" }   # idempotent
+
+POST /runs/complete              same body — creates a run directly in the
+                                 completed state when the start event never
+                                 reached the server
 
 GET /heatmap
-→ { "days": [ { "date": "2026-06-08", "count": 0 }, ..., { "date": "2026-07-07", "count": 3 } ] }
+→ { "days": [ { "date": "2026-06-08", "completed": 0, "started": 1 }, ... ] }
+
+GET /results?workout=<slug>
+→ { "results": [ { "name", "day", "durationSec", "totalReps", "breaks",
+                   "completedAll", "notes" } ] }   # newest first, max 50
 ```
 
 `heatmap` always returns exactly 30 days, oldest first, including zero-count
-days — the client should not have to infer gaps.
+days — the client should not have to infer gaps. Historical `daily_checkins`
+counts are merged into `completed`, so pre-runs history is preserved.
+
+`POST /checkin` was removed when the run lifecycle landed (the app is the
+only client and migrated in the same change); deploy the Worker before or
+together with the frontend — a stale cached frontend degrades silently.

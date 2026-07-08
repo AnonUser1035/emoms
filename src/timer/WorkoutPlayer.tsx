@@ -7,21 +7,28 @@ import workouts, {
   type RunSummary,
   type Workout,
 } from './workouts';
+import { startRun } from '../heatmap/api';
+import { getIdentity } from '../whiteboard/identity';
+import ResultsBoard from '../whiteboard/ResultsBoard';
 import { AudioCues } from './audio';
 import {
   clearActiveRun,
   isStaleActiveRun,
   loadActiveRun,
   saveActiveRun,
+  setActiveRunId,
   type ActiveRunSnapshot,
 } from './activeRun';
 import EmomPlayer from './EmomPlayer';
+import { expand } from './expand';
+import FinishScreen, { type FinishedRun } from './FinishScreen';
 import RepPlayer from './RepPlayer';
 import { measureLabel, mmss } from './format';
 
 interface WorkoutPlayerProps {
-  /** Fired exactly once per finished run. Rep runs include their summary. */
-  onComplete?: (summary?: RunSummary) => void;
+  /** Shared state (heatmap/whiteboard) may have changed — refetch it. Fired
+   *  after a run-start lands on the server and after a completion posts. */
+  onActivity?: () => void;
 }
 
 function freshSnapshot(workout: Workout): ActiveRunSnapshot {
@@ -43,7 +50,7 @@ function freshSnapshot(workout: Workout): ActiveRunSnapshot {
  * resume-or-discard prompt. Dispatches by workout mode — the interval player
  * and the rep player never see each other's workouts.
  */
-export default function WorkoutPlayer({ onComplete }: WorkoutPlayerProps) {
+export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
   // Restore once, at mount. Fresh → straight into the run; stale → prompt.
   const [restored] = useState(() => loadActiveRun());
   const [active, setActive] = useState<ActiveRunSnapshot | null>(() =>
@@ -55,6 +62,7 @@ export default function WorkoutPlayer({ onComplete }: WorkoutPlayerProps) {
   const [workout, setWorkout] = useState<Workout>(
     () => getWorkout(restored?.slug ?? '') ?? workouts[0],
   );
+  const [finished, setFinished] = useState<FinishedRun | null>(null);
 
   const cues = useRef<AudioCues | null>(null);
   if (!cues.current) cues.current = new AudioCues();
@@ -65,6 +73,14 @@ export default function WorkoutPlayer({ onComplete }: WorkoutPlayerProps) {
     const snapshot = freshSnapshot(workout);
     saveActiveRun(snapshot);
     setActive(snapshot);
+    // Best-effort run-start; the id lands in the snapshot whenever it
+    // arrives so completion targets this run even across a reload.
+    void startRun(workout.slug, getIdentity()).then((runId) => {
+      if (runId) {
+        setActiveRunId(workout.slug, runId);
+        onActivity?.();
+      }
+    });
   };
 
   const handleExit = () => {
@@ -72,17 +88,44 @@ export default function WorkoutPlayer({ onComplete }: WorkoutPlayerProps) {
     setActive(null);
   };
 
-  // Finish clears the snapshot but keeps the player mounted on its done
-  // screen; "Back to start" (onExit) returns to idle.
-  const handleEmomComplete = () => {
+  // A finish hands off to the FinishScreen, which posts the completion event
+  // (with whiteboard identity and optional notes) and returns to idle.
+  const finishRun = (w: Workout, result: FinishedRun['result']) => {
+    const runId = loadActiveRun()?.runId ?? null;
     clearActiveRun();
-    onComplete?.();
+    setActive(null);
+    setFinished({ slug: w.slug, title: w.title, runId, result });
   };
 
-  const handleRepFinish = (summary: RunSummary) => {
-    clearActiveRun();
-    onComplete?.(summary);
+  const handleEmomComplete = (w: EmomWorkout) => {
+    const durationSec = expand(w).reduce((acc, s) => acc + s.durationSec, 0);
+    finishRun(w, {
+      durationSec,
+      totalReps: null,
+      breaks: null,
+      completedAll: true,
+    });
   };
+
+  const handleRepFinish = (w: RepWorkout, summary: RunSummary) => {
+    finishRun(w, {
+      durationSec: summary.elapsedSec,
+      totalReps: summary.totalReps,
+      breaks: summary.breaks,
+      completedAll: summary.completed,
+    });
+  };
+
+  // ── Finished: summary + whiteboard post ─────────────────────────────────
+  if (finished) {
+    return (
+      <FinishScreen
+        run={finished}
+        onPosted={onActivity}
+        onDone={() => setFinished(null)}
+      />
+    );
+  }
 
   // ── Stale snapshot: resume or discard ───────────────────────────────────
   if (stale) {
@@ -132,22 +175,24 @@ export default function WorkoutPlayer({ onComplete }: WorkoutPlayerProps) {
       return null;
     }
     if (active.mode === 'emom') {
+      const w = activeWorkout as EmomWorkout;
       return (
         <EmomPlayer
-          workout={activeWorkout as EmomWorkout}
+          workout={w}
           startedAtMs={active.startedAtMs}
           cues={cues.current}
-          onComplete={handleEmomComplete}
+          onComplete={() => handleEmomComplete(w)}
           onExit={handleExit}
         />
       );
     }
+    const w = activeWorkout as RepWorkout;
     return (
       <RepPlayer
-        workout={activeWorkout as RepWorkout}
+        workout={w}
         snapshot={active}
         cues={cues.current}
-        onFinish={handleRepFinish}
+        onFinish={(summary) => handleRepFinish(w, summary)}
         onExit={handleExit}
       />
     );
@@ -188,6 +233,8 @@ export default function WorkoutPlayer({ onComplete }: WorkoutPlayerProps) {
         ) : (
           <RepOverview workout={workout} />
         )}
+
+        <ResultsBoard slug={workout.slug} />
       </div>
 
       <button
