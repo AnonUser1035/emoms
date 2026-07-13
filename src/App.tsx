@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { fetchHeatmap, type HeatmapDay } from './heatmap/api';
 import Heatmap from './heatmap/Heatmap';
+import InstallPrompt from './install/InstallPrompt';
 import WorkoutPlayer from './timer/WorkoutPlayer';
 
 export default function App() {
@@ -30,6 +31,8 @@ export default function App() {
       <WorkoutPlayer onActivity={loadHeatmap} />
 
       {heatmap && heatmap.length > 0 && <Heatmap days={heatmap} />}
+
+      <InstallPrompt />
     </div>
   );
 }
