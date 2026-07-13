@@ -5,15 +5,28 @@ import { expand } from '../expand';
 import { measureLabel } from '../format';
 
 describe('workout registry', () => {
-  it('holds all four workouts, retrievable by slug', () => {
-    expect(workouts.map((w) => w.slug)).toEqual([
+  it('includes the seed workouts, each retrievable by slug', () => {
+    const slugs = new Set(workouts.map((w) => w.slug));
+    for (const slug of [
       'emom-30',
       'chipper-60-30',
       'pushups-300',
       'cycles-6x5',
-    ]);
+    ]) {
+      expect(slugs.has(slug)).toBe(true);
+    }
     for (const w of workouts) {
       expect(getWorkout(w.slug)).toBe(w);
+    }
+  });
+
+  it('has unique, non-empty slugs and titles/summaries throughout', () => {
+    const slugs = workouts.map((w) => w.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+    for (const w of workouts) {
+      expect(w.slug).toMatch(/^[a-z0-9-]+$/);
+      expect(w.title.length).toBeGreaterThan(0);
+      expect(w.summary.length).toBeGreaterThan(0);
     }
   });
 
@@ -22,8 +35,12 @@ describe('workout registry', () => {
     expect(w?.mode).toBe('emom');
   });
 
-  it('attributes every workout, all four as David Rosen originals', () => {
+  it('attributes every imported workout to David Rosen', () => {
     expect(workouts.every((w) => w.origin === 'original')).toBe(true);
+  });
+
+  it('getWorkout returns undefined for an unknown slug', () => {
+    expect(getWorkout('nope-not-here')).toBeUndefined();
   });
 });
 
@@ -103,5 +120,33 @@ describe('300 pushups', () => {
       { movement: 'Goblet squats', count: 15 },
       { movement: 'Tuck jumps', count: 15 },
     ]);
+  });
+});
+
+describe('imported library shapes', () => {
+  it('includes AMRAP workouts, each a capped single round', () => {
+    const amraps = workouts.filter((w) => w.mode === 'amrap');
+    expect(amraps.length).toBeGreaterThan(0);
+    for (const w of amraps) {
+      if (w.mode !== 'amrap') continue;
+      expect(w.capMin).toBeGreaterThan(0);
+      expect(w.round.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('includes interval workouts that expand to a valid timeline', () => {
+    const intervals = workouts.filter((w) => w.mode === 'interval');
+    expect(intervals.length).toBeGreaterThan(0);
+    for (const w of intervals) {
+      if (w.mode !== 'interval') continue;
+      const segs = expand(w);
+      expect(segs.length).toBeGreaterThan(0);
+      const works = segs.filter((s) => s.type === 'work').length;
+      expect(works).toBe(w.rounds);
+    }
+  });
+
+  it('labels a max-effort measure', () => {
+    expect(measureLabel({ kind: 'max' })).toBe('max reps');
   });
 });

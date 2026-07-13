@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { EmomWorkout } from '../workouts';
+import type { EmomWorkout, IntervalWorkout } from '../workouts';
 import workouts, { getWorkout } from '../workouts';
 import { expand } from '../expand';
 
@@ -155,6 +155,51 @@ describe('expand()', () => {
   it('is deterministic', () => {
     const w = getWorkout('emom-30') as EmomWorkout;
     expect(expand(w)).toEqual(expand(w));
+  });
+});
+
+describe('expand() — interval workouts', () => {
+  const tabata: IntervalWorkout = {
+    mode: 'interval',
+    slug: 't',
+    origin: 'original',
+    title: 't',
+    summary: '',
+    rounds: 8,
+    workSec: 20,
+    restSec: 10,
+    stations: [{ movement: 'Pushups', measure: { kind: 'max' } }],
+  };
+
+  it('compiles tabata to alternating work/rest, 16 segments, 240s', () => {
+    const segs = expand(tabata);
+    expect(segs).toHaveLength(16);
+    expect(segs.map((s) => s.type)).toEqual(
+      Array.from({ length: 8 }, () => ['work', 'break']).flat(),
+    );
+    expect(segs.reduce((a, s) => a + s.durationSec, 0)).toBe(240);
+    expect(segs.filter((s) => s.type === 'work').every((s) => s.durationSec === 20)).toBe(true);
+  });
+
+  it('emits no break segments when restSec is 0', () => {
+    const segs = expand({ ...tabata, restSec: 0 });
+    expect(segs).toHaveLength(8);
+    expect(segs.every((s) => s.type === 'work')).toBe(true);
+  });
+
+  it('rotates stations across rounds', () => {
+    const segs = expand({
+      ...tabata,
+      rounds: 4,
+      restSec: 0,
+      stations: [
+        { movement: 'A', measure: { kind: 'max' } },
+        { movement: 'B', measure: { kind: 'max' } },
+      ],
+    });
+    expect(
+      segs.map((s) => (s.type === 'work' ? s.station.movement : '')),
+    ).toEqual(['A', 'B', 'A', 'B']);
   });
 });
 

@@ -49,9 +49,14 @@ async function clickFinish() {
 }
 
 /** The default selection is now the daily pick — tests that need a specific
- *  workout select its tab explicitly (tab labels may carry the daily ★). */
+ *  workout choose it from the dropdown explicitly. */
+function selectWorkout(slug: string) {
+  fireEvent.change(screen.getByRole('combobox', { name: /choose a workout/i }), {
+    target: { value: slug },
+  });
+}
 function selectTinyEmom() {
-  fireEvent.click(screen.getByRole('tab', { name: /^(★ )?tiny$/i }));
+  selectWorkout('tiny');
 }
 
 describe('WorkoutPlayer', () => {
@@ -195,10 +200,11 @@ describe('WorkoutPlayer', () => {
       screen.getByRole('heading', { name: expected.title, level: 2 }),
     ).toBeDefined();
     expect(screen.getByText(/today's emom/i)).toBeDefined();
-    // The daily tab carries the star.
-    expect(
-      screen.getByRole('tab', { name: new RegExp(`^\u2605 ${expected.title}$`) }),
-    ).toBeDefined();
+    // The dropdown defaults to the daily pick.
+    const select = screen.getByRole('combobox', {
+      name: /choose a workout/i,
+    }) as HTMLSelectElement;
+    expect(select.value).toBe(expected.slug);
   });
 
   it('shows origin badges and lets the athlete switch freely', () => {
@@ -207,7 +213,7 @@ describe('WorkoutPlayer', () => {
     selectTinyEmom();
     expect(screen.getByText(/dr original/i)).toBeDefined();
 
-    fireEvent.click(screen.getByRole('tab', { name: /tiny rep/i }));
+    selectWorkout('tiny-rep');
     expect(screen.getByText(/^generated$/i)).toBeDefined();
     expect(screen.getByRole('button', { name: /start/i })).toBeDefined();
   });
@@ -216,8 +222,10 @@ describe('WorkoutPlayer', () => {
     const onActivity = vi.fn();
     render(<WorkoutPlayer onActivity={onActivity} />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /tiny rep/i }));
-    expect(screen.getByText(/five pushups/i)).toBeDefined();
+    selectWorkout('tiny-rep');
+    // Exact match hits the body summary paragraph, not the <option> label
+    // (which now embeds the summary as "Tiny Rep — Five pushups.").
+    expect(screen.getByText('Five pushups.')).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
     fireEvent.click(screen.getByRole('button', { name: /target done/i }));

@@ -2,7 +2,9 @@ import { useRef, useState } from 'react';
 
 import workouts, {
   getWorkout,
+  type AmrapWorkout,
   type EmomWorkout,
+  type IntervalWorkout,
   type RepWorkout,
   type RunSummary,
   type Workout,
@@ -20,6 +22,7 @@ import {
   type ActiveRunSnapshot,
 } from './activeRun';
 import { dailyPick } from './dailyPick';
+import AmrapPlayer from './AmrapPlayer';
 import EmomPlayer from './EmomPlayer';
 import { expand } from './expand';
 import FinishScreen, { type FinishedRun } from './FinishScreen';
@@ -34,15 +37,23 @@ interface WorkoutPlayerProps {
 
 function freshSnapshot(workout: Workout): ActiveRunSnapshot {
   const base = { slug: workout.slug, startedAtMs: Date.now() };
-  if (workout.mode === 'emom') return { mode: 'emom', ...base };
-  return {
-    mode: 'rep',
-    ...base,
-    targetIndex: 0,
-    repsByTarget: workout.targets.map(() => 0),
-    breaks: 0,
-    inBreak: false,
-  };
+  switch (workout.mode) {
+    case 'emom':
+      return { mode: 'emom', ...base };
+    case 'interval':
+      return { mode: 'interval', ...base };
+    case 'amrap':
+      return { mode: 'amrap', ...base, rounds: 0 };
+    case 'rep':
+      return {
+        mode: 'rep',
+        ...base,
+        targetIndex: 0,
+        repsByTarget: workout.targets.map(() => 0),
+        breaks: 0,
+        inBreak: false,
+      };
+  }
 }
 
 /**
@@ -101,7 +112,8 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
     setFinished({ slug: w.slug, title: w.title, runId, result });
   };
 
-  const handleEmomComplete = (w: EmomWorkout) => {
+  // Clock-paced (emom, interval): the timeline defines the duration.
+  const handleClockComplete = (w: EmomWorkout | IntervalWorkout) => {
     const durationSec = expand(w).reduce((acc, s) => acc + s.durationSec, 0);
     finishRun(w, {
       durationSec,
@@ -117,6 +129,15 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
       totalReps: summary.totalReps,
       breaks: summary.breaks,
       completedAll: summary.completed,
+    });
+  };
+
+  const handleAmrapFinish = (w: AmrapWorkout, summary: RunSummary) => {
+    finishRun(w, {
+      durationSec: summary.elapsedSec,
+      totalReps: summary.totalReps,
+      breaks: null,
+      completedAll: true,
     });
   };
 
@@ -178,14 +199,26 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
       setActive(null);
       return null;
     }
-    if (active.mode === 'emom') {
-      const w = activeWorkout as EmomWorkout;
+    if (active.mode === 'emom' || active.mode === 'interval') {
+      const w = activeWorkout as EmomWorkout | IntervalWorkout;
       return (
         <EmomPlayer
           workout={w}
           startedAtMs={active.startedAtMs}
           cues={cues.current}
-          onComplete={() => handleEmomComplete(w)}
+          onComplete={() => handleClockComplete(w)}
+          onExit={handleExit}
+        />
+      );
+    }
+    if (active.mode === 'amrap') {
+      const w = activeWorkout as AmrapWorkout;
+      return (
+        <AmrapPlayer
+          workout={w}
+          snapshot={active}
+          cues={cues.current}
+          onFinish={(summary) => handleAmrapFinish(w, summary)}
           onExit={handleExit}
         />
       );
@@ -206,25 +239,27 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
   return (
     <div className="flex flex-col gap-6">
       {workouts.length > 1 && (
-        <div role="tablist" aria-label="Choose a workout" className="flex flex-wrap gap-2">
-          {workouts.map((w) => (
-            <button
-              key={w.slug}
-              type="button"
-              role="tab"
-              aria-selected={w.slug === workout.slug}
-              onClick={() => setWorkout(w)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                w.slug === workout.slug
-                  ? 'bg-work text-black'
-                  : 'bg-bg-elevated text-fg-muted hover:text-fg'
-              }`}
-            >
-              {w.slug === daily.slug ? '★ ' : ''}
-              {w.title}
-            </button>
-          ))}
-        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold text-fg-muted">
+            Choose a workout
+          </span>
+          <select
+            aria-label="Choose a workout"
+            value={workout.slug}
+            onChange={(e) => {
+              const w = getWorkout(e.target.value);
+              if (w) setWorkout(w);
+            }}
+            className="rounded-xl border border-border bg-bg-elevated px-4 py-3 text-base font-semibold"
+          >
+            {workouts.map((w) => (
+              <option key={w.slug} value={w.slug}>
+                {w.slug === daily.slug ? '★ ' : ''}
+                {w.title} — {w.summary}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
 
       <div className="flex flex-col gap-4">
@@ -253,8 +288,12 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
 
         {workout.mode === 'emom' ? (
           <EmomOverview workout={workout} />
-        ) : (
+        ) : workout.mode === 'rep' ? (
           <RepOverview workout={workout} />
+        ) : workout.mode === 'amrap' ? (
+          <AmrapOverview workout={workout} />
+        ) : (
+          <IntervalOverview workout={workout} />
         )}
 
         <ResultsBoard slug={workout.slug} />
@@ -378,6 +417,90 @@ function RepOverview({ workout }: { workout: RepWorkout }) {
           {workout.onBreak.map((t) => `${t.count} ${t.movement.toLowerCase()}`).join(' · ')}
         </p>
       )}
+    </div>
+  );
+}
+
+function AmrapOverview({ workout }: { workout: AmrapWorkout }) {
+  const step = workout.roundStep ?? 0;
+  return (
+    <div className="rounded-xl border border-border bg-bg-elevated p-4">
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="font-semibold">One round</span>
+        <span className="text-sm text-fg-muted">{workout.capMin}-min AMRAP</span>
+      </div>
+      <ul className="mt-3 flex flex-col gap-1.5">
+        {workout.round.map((t, ti) => (
+          <li
+            key={ti}
+            className="flex items-baseline justify-between gap-4 text-sm"
+          >
+            <span>
+              {t.count} {t.movement}
+              {t.notes ? ` (${t.notes})` : ''}
+            </span>
+            <span className="text-fg-muted">{t.load ?? ''}</span>
+          </li>
+        ))}
+      </ul>
+      {step > 0 && (
+        <p className="mt-3 border-t border-border pt-3 text-sm text-fg-muted">
+          Add {step} rep{step === 1 ? '' : 's'} to every movement each round.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function IntervalOverview({ workout }: { workout: IntervalWorkout }) {
+  return (
+    <div className="rounded-xl border border-border bg-bg-elevated p-4">
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="font-semibold">
+          {workout.rounds} rounds
+          {workout.stations.length > 1
+            ? ` · ${workout.stations.length} stations`
+            : ''}
+        </span>
+        <span className="text-sm text-fg-muted">
+          {workout.workSec}s on
+          {workout.restSec > 0 ? ` · ${workout.restSec}s off` : ''}
+        </span>
+      </div>
+      <ul className="mt-3 flex flex-col gap-1.5">
+        {workout.stations.map((s, si) =>
+          s.circuit ? (
+            <li key={si} className="text-sm">
+              <span>{s.movement}</span>
+              <ul className="mt-1 flex flex-col gap-1 pl-4">
+                {s.circuit.map((p, pi) => (
+                  <li
+                    key={pi}
+                    className="flex items-baseline justify-between gap-4 text-fg-muted"
+                  >
+                    <span>{p.movement}</span>
+                    <span>
+                      {p.measure ? measureLabel(p.measure) : ''}
+                      {p.load ? ` · ${p.load}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ) : (
+            <li
+              key={si}
+              className="flex items-baseline justify-between gap-4 text-sm"
+            >
+              <span>{s.movement}</span>
+              <span className="text-fg-muted">
+                {measureLabel(s.measure)}
+                {s.load ? ` · ${s.load}` : ''}
+              </span>
+            </li>
+          ),
+        )}
+      </ul>
     </div>
   );
 }

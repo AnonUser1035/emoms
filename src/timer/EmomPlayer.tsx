@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { EmomWorkout, Segment } from './workouts';
+import type { EmomWorkout, IntervalWorkout, Segment } from './workouts';
 import type { AudioCues } from './audio';
 import { expand } from './expand';
 import { measureLabel, mmss, paceLabel } from './format';
@@ -38,7 +38,9 @@ function nextLabel(segment: Segment | undefined): string {
 }
 
 interface EmomPlayerProps {
-  workout: EmomWorkout;
+  // Interval workouts play here too — both compile to a Segment[] the same
+  // clock drives; only `title` and `expand()` are read off the workout.
+  workout: EmomWorkout | IntervalWorkout;
   /** Wall-clock start (from the active-run snapshot) — playback begins at
    *  the elapsed time this implies, so a restored run resumes mid-timeline. */
   startedAtMs: number;

@@ -22,6 +22,8 @@ export function measureLabel(measure: Measure): string {
       return `${measure.meters} m`;
     case 'hold':
       return `${measure.seconds} sec hold`;
+    case 'max':
+      return 'max reps';
   }
 }
 

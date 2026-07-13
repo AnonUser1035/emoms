@@ -26,7 +26,11 @@ interface BaseSnapshot {
 }
 
 export type ActiveRunSnapshot =
+  // Clock-paced runs (emom, interval) resume purely from startedAtMs — the
+  // timeline is recomputed, so no per-run bookkeeping is stored.
   | ({ mode: 'emom' } & BaseSnapshot)
+  | ({ mode: 'interval' } & BaseSnapshot)
+  | ({ mode: 'amrap'; rounds: number } & BaseSnapshot)
   | ({
       mode: 'rep';
       targetIndex: number;
@@ -106,6 +110,10 @@ function isValidSnapshot(value: unknown): value is ActiveRunSnapshot {
   if (!workout) return false;
 
   if (s.mode === 'emom') return workout.mode === 'emom';
+  if (s.mode === 'interval') return workout.mode === 'interval';
+  if (s.mode === 'amrap') {
+    return workout.mode === 'amrap' && Number.isInteger(s.rounds);
+  }
   if (s.mode !== 'rep' || workout.mode !== 'rep') return false;
   return (
     Number.isInteger(s.targetIndex) &&
@@ -127,9 +135,11 @@ export function isStaleActiveRun(snapshot: ActiveRunSnapshot): boolean {
   if (!workout) return true;
 
   let boundSec: number;
-  if (workout.mode === 'emom') {
+  if (workout.mode === 'emom' || workout.mode === 'interval') {
     const totalSec = expand(workout).reduce((acc, s) => acc + s.durationSec, 0);
     boundSec = totalSec + SLACK_SEC;
+  } else if (workout.mode === 'amrap') {
+    boundSec = workout.capMin * 60 + SLACK_SEC;
   } else if (workout.capMin != null) {
     boundSec = workout.capMin * 60 + SLACK_SEC;
   } else {

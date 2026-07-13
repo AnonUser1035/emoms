@@ -4,7 +4,13 @@
 // All EMOM structure — rotation, per-station intervals, run-to-the-clock
 // partial rounds, trailing breaks/holds — is resolved here, deterministically.
 
-import type { Block, EmomWorkout, Segment, Station } from './workouts';
+import type {
+  Block,
+  EmomWorkout,
+  IntervalWorkout,
+  Segment,
+  Station,
+} from './workouts';
 
 /** Seconds a station occupies within a block (hold = its own length). */
 function stationSeconds(station: Station, defaultInterval: number): number {
@@ -62,7 +68,30 @@ function expandBlock(block: Block, blockIndex: number): Segment[] {
   return segments;
 }
 
-/** Flatten an EMOM workout into the ordered timeline the timer plays. Pure. */
-export function expand(workout: EmomWorkout): Segment[] {
+// An interval workout is uniform rounds of work-then-rest, so it compiles
+// directly: a work segment per round (station rotated), and a break segment
+// after each when restSec > 0. All one "block" — blockIndex 0.
+function expandInterval(workout: IntervalWorkout): Segment[] {
+  const { rounds, workSec, restSec, stations } = workout;
+  const segments: Segment[] = [];
+  for (let r = 0; r < rounds; r++) {
+    segments.push({
+      type: 'work',
+      durationSec: workSec,
+      station: stations[r % stations.length],
+      blockIndex: 0,
+      round: r + 1,
+    });
+    if (restSec > 0) {
+      segments.push({ type: 'break', durationSec: restSec, blockIndex: 0 });
+    }
+  }
+  return segments;
+}
+
+/** Flatten a clock-paced workout into the ordered timeline the timer plays.
+ *  Pure. Both EMOM (blocks/rotation) and interval (rounds of work/rest). */
+export function expand(workout: EmomWorkout | IntervalWorkout): Segment[] {
+  if (workout.mode === 'interval') return expandInterval(workout);
   return workout.blocks.flatMap((block, index) => expandBlock(block, index));
 }

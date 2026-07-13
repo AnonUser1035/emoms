@@ -9,7 +9,7 @@ Workouts are code-authored data in `src/timer/workouts.ts`. Generation happens
 here, in the authoring loop — the app has no runtime AI. Every new workout is
 a data-only PR a human reviews (and ideally tries) before it merges.
 
-## The three timing shapes — pick by who ends a segment
+## The five timing shapes — pick by who ends a segment
 
 1. **EMOM blocks** (`mode: 'emom'`) — the clock ends everything. Ordered
    `Block[]`, each a rotation of stations one per interval, run to the clock
@@ -18,18 +18,32 @@ a data-only PR a human reviews (and ideally tries) before it merges.
 2. **Rep workouts** (`mode: 'rep'`) — the athlete ends everything (optionally
    capped). Ordered `RepTarget[]` on a count-up clock, optional `capMin`,
    optional `onBreak` penalty prescription. Use for chippers ("60 of each,
-   then 30 of each") and rep-goals ("300 pushups or 35 min"). References:
-   `chipper-60-30`, `pushups-300`.
+   then 30 of each"), rep-goals ("300 pushups or 35 min"), and
+   pyramids/ladders (build the rungs with `ladder()`/`range()`, never by
+   hand; "N rounds for time" with `rounds()`). References: `chipper-60-30`,
+   `pushups-300`.
 3. **Circuit cycles** (`mode: 'emom'` + circuit stations) — the clock enforces
    a coarse boundary; contents are an advisory checklist. A station with
    `circuit: CircuitPart[]` renders as tap-to-check inside one timed segment,
    with soft minute ticks. Use for "N-minute cycles of these exercises, pace
    yourself". Reference: `cycles-6x5`.
+4. **AMRAP** (`mode: 'amrap'`) — the clock ends it, the athlete counts rounds.
+   A fixed `capMin`, one `round: RepTarget[]` repeated, optional `roundStep`
+   (reps added per round for ascending schemes). The inverse of a rep workout.
+   Reference: the `amrap-*` entries.
+5. **Interval / tabata** (`mode: 'interval'`) — rounds of timed work and rest.
+   `rounds`, `workSec`, `restSec`, and a `stations` list rotated one per work
+   interval. It compiles through `expand()` to work/rest segments and plays on
+   the same interval clock as EMOM — no new runtime. Use `{ kind: 'max' }` for
+   count-yourself stations. References: `intervals-10x2`, `tabata-push-pull`.
 
 ## House conventions
 
-- **Equipment on hand**: rower, ski erg, assault bike, dumbbells, kettlebells
-  (goblet), medicine ball, mat. Nothing that needs a rack or barbell.
+- **Equipment on hand**: a bench, dumbbells, and mats are the guaranteed core;
+  also rower, ski erg, assault bike, kettlebells (goblet), and a medicine ball.
+  A barbell/rack is occasional, not assumed — when a logged movement needs one,
+  prefer the dumbbell equivalent, and only keep a barbell cue (`'empty bar'`,
+  etc.) when the movement is genuinely bar-specific.
 - **Loads in use** (cues, not law): front squat 45 lb, single-arm row 60 lb,
   kneeling press 45 lb, goblet squat 65 lb, seated OHP 40 lb, reverse lunge
   45 lb, full-body extension 25 lb. Express as `load: '45 lb'` strings.
@@ -52,12 +66,15 @@ The type makes `origin` required; do not work around it.
 
 ## Checklist
 
-1. Define the workout in `src/timer/workouts.ts` following an existing
-   reference; add it to the `workouts` registry array.
-2. Extend `src/timer/__tests__/workouts.test.ts`: registry slug list, plus a
-   shape test (for EMOM/cycles: `expand()` segment count and durations; for
-   rep: target list, cap, break prescription).
+1. Define the workout in the matching shape file under `src/timer/workouts/`
+   (`emom.ts`, `rep.ts`, `amrap.ts`, `interval.ts`, or a `*Library.ts`),
+   following an existing reference, and add it to that file's exported array —
+   `index.ts` assembles the registry. Types live in `./types`, helpers in
+   `./builders`.
+2. Extend `src/timer/__tests__/workouts.test.ts`: registry membership, plus a
+   shape test (EMOM/cycles/interval: `expand()` segment count and durations;
+   rep: target list, cap, break prescription; AMRAP: cap and round).
 3. Run `npm test`, `npx tsc -b`, `npm run lint`.
 4. Nothing else changes — no player, worker, or heatmap edits. If the workout
-   doesn't fit the three shapes above, stop and propose a model change via
+   doesn't fit the five shapes above, stop and propose a model change via
    openspec instead of bending data.
