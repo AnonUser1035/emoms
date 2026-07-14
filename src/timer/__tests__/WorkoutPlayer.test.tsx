@@ -78,9 +78,9 @@ describe('WorkoutPlayer', () => {
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
     expect(window.localStorage.getItem(KEY)).not.toBeNull();
 
-    act(() => {
-      vi.advanceTimersByTime(65_000);
-    });
+    // Tiny has a single segment — one "Done" tap ends it. Elapsed time alone
+    // never would (that's the whole point of the tap-paced model).
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
     // Finish screen with the summary; the snapshot is already cleared.
     expect(screen.getByText(/tiny complete/i)).toBeDefined();
     expect(window.localStorage.getItem(KEY)).toBeNull();
@@ -96,15 +96,11 @@ describe('WorkoutPlayer', () => {
 
     selectTinyEmom();
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
-    act(() => {
-      vi.advanceTimersByTime(65_000);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
     await clickFinish();
 
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
-    act(() => {
-      vi.advanceTimersByTime(65_000);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
     expect(screen.getByText(/tiny complete/i)).toBeDefined();
   });
 
@@ -123,12 +119,15 @@ describe('WorkoutPlayer', () => {
   });
 
   it('auto-resumes a fresh EMOM snapshot mid-timeline', () => {
+    const startedAtMs = Date.now() - 30_000;
     window.localStorage.setItem(
       KEY,
       JSON.stringify({
         mode: 'emom',
         slug: 'tiny',
-        startedAtMs: Date.now() - 30_000,
+        startedAtMs,
+        athleteIndex: 0,
+        athleteSegmentStartedAtMs: startedAtMs,
       }),
     );
     render(<WorkoutPlayer />);
@@ -136,35 +135,44 @@ describe('WorkoutPlayer', () => {
     // Straight into the run — no Start button, pause control visible.
     expect(screen.queryByRole('button', { name: /^start$/i })).toBeNull();
     expect(screen.getByRole('button', { name: /pause/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /^done$/i })).toBeDefined();
 
-    act(() => {
-      vi.advanceTimersByTime(35_000);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
     expect(screen.getByText(/tiny complete/i)).toBeDefined();
   });
 
-  it('a run that finished while the page was gone lands on the finish screen', () => {
+  it('a run well past the schedule total keeps running until the athlete taps done', () => {
+    const startedAtMs = Date.now() - 70_000; // past the 60s nominal total
     window.localStorage.setItem(
       KEY,
       JSON.stringify({
         mode: 'emom',
         slug: 'tiny',
-        startedAtMs: Date.now() - 70_000, // past the 60s total, within slack
+        startedAtMs,
+        athleteIndex: 0,
+        athleteSegmentStartedAtMs: startedAtMs,
       }),
     );
     render(<WorkoutPlayer />);
 
+    // Nothing auto-finished it — the schedule is only a ghost now.
+    expect(screen.getByText(/behind/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /^done$/i })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
     expect(screen.getByText(/tiny complete/i)).toBeDefined();
-    expect(window.localStorage.getItem(KEY)).toBeNull();
   });
 
   it('offers resume-or-discard for a stale snapshot', () => {
+    const startedAtMs = Date.now() - 18_000_000; // 5h > the 4h uncapped bound
     window.localStorage.setItem(
       KEY,
       JSON.stringify({
         mode: 'emom',
         slug: 'tiny',
-        startedAtMs: Date.now() - 2_000_000, // 2000s > 60s total + 1800s slack
+        startedAtMs,
+        athleteIndex: 0,
+        athleteSegmentStartedAtMs: startedAtMs,
       }),
     );
     render(<WorkoutPlayer />);
@@ -177,18 +185,25 @@ describe('WorkoutPlayer', () => {
   });
 
   it('resuming a stale snapshot re-enters the run', () => {
+    const startedAtMs = Date.now() - 18_000_000;
     window.localStorage.setItem(
       KEY,
       JSON.stringify({
         mode: 'emom',
         slug: 'tiny',
-        startedAtMs: Date.now() - 2_000_000,
+        startedAtMs,
+        athleteIndex: 0,
+        athleteSegmentStartedAtMs: startedAtMs,
       }),
     );
     render(<WorkoutPlayer />);
 
-    fireEvent.click(screen.getByRole('button', { name: /resume/i }));
-    // Way past the timeline end → lands straight on the finish screen.
+    fireEvent.click(screen.getByRole('button', { name: /^resume$/i }));
+    // Re-enters the run rather than auto-finishing — completion is
+    // athlete-driven now, not clock-driven.
+    expect(screen.getByRole('button', { name: /^done$/i })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
     expect(screen.getByText(/tiny complete/i)).toBeDefined();
   });
 

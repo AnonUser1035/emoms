@@ -45,9 +45,19 @@ export class AudioCues {
     }
   }
 
-  /** Short low tick for the final 3-2-1 countdown of a segment. */
+  /** Short low tick for the final 3-2-1 countdown of a schedule segment —
+   *  a lead-in to the *schedule's* next transition, independent of the
+   *  athlete's own progress. */
   countdown(): void {
     this.tone(660, 120);
+  }
+
+  /** Ambient pace marker: fires when the schedule crosses into its next
+   *  segment, whether or not the athlete has tapped through yet. Distinct
+   *  from `start()` (the athlete's own tap) so the two are tellable apart
+   *  by ear. */
+  beacon(): void {
+    this.tone(660, 260, 0.15);
   }
 
   /** Soft pacing tick at whole minutes inside a circuit segment — quieter

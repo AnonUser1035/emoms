@@ -7,12 +7,11 @@
 // bookkeeping: recomputing elapsed from `startedAtMs` is exact. This is
 // deliberately not run history; the server stays the system of record.
 
-import { expand } from './expand';
 import { getWorkout } from './workouts';
 
 const KEY = 'emoms.activeRun.v1';
 
-/** Auto-resume window past a run's known length (cap or EMOM total). */
+/** Auto-resume window past a run's known length (cap). */
 const SLACK_SEC = 30 * 60;
 /** Auto-resume window for uncapped rep workouts, which have no known length. */
 const UNCAPPED_BOUND_SEC = 4 * 60 * 60;
@@ -25,11 +24,17 @@ interface BaseSnapshot {
   runId?: string;
 }
 
+/** Tap-paced position within a clock-paced (emom/interval) run — the
+ *  schedule pointer is recomputed from startedAtMs, but the athlete pointer
+ *  is driven by taps and so must be persisted explicitly. */
+interface AthletePointerSnapshot {
+  athleteIndex: number;
+  athleteSegmentStartedAtMs: number;
+}
+
 export type ActiveRunSnapshot =
-  // Clock-paced runs (emom, interval) resume purely from startedAtMs — the
-  // timeline is recomputed, so no per-run bookkeeping is stored.
-  | ({ mode: 'emom' } & BaseSnapshot)
-  | ({ mode: 'interval' } & BaseSnapshot)
+  | ({ mode: 'emom' } & AthletePointerSnapshot & BaseSnapshot)
+  | ({ mode: 'interval' } & AthletePointerSnapshot & BaseSnapshot)
   | ({ mode: 'amrap'; rounds: number } & BaseSnapshot)
   | ({
       mode: 'rep';
@@ -109,8 +114,13 @@ function isValidSnapshot(value: unknown): value is ActiveRunSnapshot {
   const workout = getWorkout(s.slug);
   if (!workout) return false;
 
-  if (s.mode === 'emom') return workout.mode === 'emom';
-  if (s.mode === 'interval') return workout.mode === 'interval';
+  if (s.mode === 'emom' || s.mode === 'interval') {
+    return (
+      workout.mode === s.mode &&
+      Number.isInteger(s.athleteIndex) &&
+      Number.isFinite(s.athleteSegmentStartedAtMs)
+    );
+  }
   if (s.mode === 'amrap') {
     return workout.mode === 'amrap' && Number.isInteger(s.rounds);
   }
@@ -127,8 +137,9 @@ function isValidSnapshot(value: unknown): value is ActiveRunSnapshot {
 
 /**
  * A stale snapshot is offered resume-or-discard instead of auto-resuming.
- * Bound: known run length (EMOM total, or rep cap) plus slack; uncapped rep
- * workouts get a fixed multi-hour window.
+ * Bound: known run length (rep cap) plus slack; uncapped workouts — rep
+ * workouts with no cap, and now emom/interval, whose real end is athlete-
+ * determined rather than clock-determined — get a fixed multi-hour window.
  */
 export function isStaleActiveRun(snapshot: ActiveRunSnapshot): boolean {
   const workout = getWorkout(snapshot.slug);
@@ -136,8 +147,7 @@ export function isStaleActiveRun(snapshot: ActiveRunSnapshot): boolean {
 
   let boundSec: number;
   if (workout.mode === 'emom' || workout.mode === 'interval') {
-    const totalSec = expand(workout).reduce((acc, s) => acc + s.durationSec, 0);
-    boundSec = totalSec + SLACK_SEC;
+    boundSec = UNCAPPED_BOUND_SEC;
   } else if (workout.mode === 'amrap') {
     boundSec = workout.capMin * 60 + SLACK_SEC;
   } else if (workout.capMin != null) {

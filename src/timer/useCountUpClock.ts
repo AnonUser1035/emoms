@@ -10,7 +10,7 @@ export interface CountUpClock {
 }
 
 /**
- * Count-up sibling of useIntervalClock, for athlete-paced workouts: elapsed
+ * Count-up sibling of useSchedule, for athlete-paced workouts: elapsed
  * time is derived from a wall-clock start timestamp rather than accumulated
  * tick deltas, so it stays exact through background throttling — and through
  * page reloads, since the caller can pass a start timestamp from a restored

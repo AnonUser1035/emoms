@@ -42,6 +42,8 @@ describe('active-run snapshot', () => {
       slug: 'emom-30',
       startedAtMs: Date.now() - 5_000,
       runId: 'r-1',
+      athleteIndex: 3,
+      athleteSegmentStartedAtMs: Date.now() - 1_000,
     };
     saveActiveRun(snap);
     expect(loadActiveRun()).toEqual(snap);
@@ -97,16 +99,19 @@ describe('isStaleActiveRun', () => {
     vi.useRealTimers();
   });
 
-  it('EMOM: fresh within total duration + slack, stale beyond', () => {
-    // emom-30 total = 1970s; bound = 1970 + 1800 slack.
+  it('EMOM: bound is four hours, since the real end is athlete-determined', () => {
+    // emom-30's nominal total (1970s) no longer bounds this — the athlete
+    // may legitimately still be behind well past it.
     const fresh: ActiveRunSnapshot = {
       mode: 'emom',
       slug: 'emom-30',
-      startedAtMs: Date.now() - 3_000_000, // 3000s
+      startedAtMs: Date.now() - 3 * 3_600_000, // 3h
+      athleteIndex: 0,
+      athleteSegmentStartedAtMs: Date.now() - 3 * 3_600_000,
     };
     const stale: ActiveRunSnapshot = {
       ...fresh,
-      startedAtMs: Date.now() - 4_000_000, // 4000s > 3770s
+      startedAtMs: Date.now() - 5 * 3_600_000, // 5h > 4h bound
     };
     expect(isStaleActiveRun(fresh)).toBe(false);
     expect(isStaleActiveRun(stale)).toBe(true);

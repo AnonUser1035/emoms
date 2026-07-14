@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { EmomWorkout, IntervalWorkout, Segment } from './workouts';
 import type { AudioCues } from './audio';
+import { saveActiveRun, type ActiveRunSnapshot } from './activeRun';
 import { expand } from './expand';
 import { measureLabel, mmss, paceLabel } from './format';
-import { useIntervalClock } from './useIntervalClock';
+import { useAthletePointer } from './useAthletePointer';
+import { useSchedule } from './useSchedule';
 import { useWakeLock } from './useWakeLock';
 
 const SEGMENT_LABELS: Record<Segment['type'], string> = {
@@ -37,83 +39,106 @@ function nextLabel(segment: Segment | undefined): string {
   return segment.station.movement;
 }
 
+/** Ahead/behind readout for the pace delta — positive means the schedule
+ *  hasn't yet reached the point the athlete needs to leave their current
+ *  segment by; negative means it already has. */
+function paceDeltaLabel(deltaSec: number): string {
+  const rounded = Math.round(deltaSec);
+  if (rounded === 0) return 'on pace';
+  return rounded > 0 ? `${mmss(rounded)} ahead` : `${mmss(-rounded)} behind`;
+}
+
+type EmomSnapshot = Extract<
+  ActiveRunSnapshot,
+  { mode: 'emom' } | { mode: 'interval' }
+>;
+
 interface EmomPlayerProps {
   // Interval workouts play here too — both compile to a Segment[] the same
-  // clock drives; only `title` and `expand()` are read off the workout.
+  // hooks drive; only `title` and `expand()` are read off the workout.
   workout: EmomWorkout | IntervalWorkout;
-  /** Wall-clock start (from the active-run snapshot) — playback begins at
-   *  the elapsed time this implies, so a restored run resumes mid-timeline. */
-  startedAtMs: number;
+  /** In-run state to start from — fresh from Start, or restored on reload. */
+  snapshot: EmomSnapshot;
   cues: AudioCues;
-  /** Fired exactly once when the workout's full timeline completes. */
-  onComplete?: () => void;
+  /** Fired exactly once when the athlete taps through the final segment,
+   *  carrying true elapsed seconds (the workout's real end is emergent, not
+   *  the schedule's nominal total). */
+  onComplete?: (elapsedSec: number) => void;
   /** Leave the run (quit mid-way, or "back to start" from the done screen). */
   onExit: () => void;
 }
 
 export default function EmomPlayer({
   workout,
-  startedAtMs,
+  snapshot,
   cues,
   onComplete,
   onExit,
 }: EmomPlayerProps) {
   const segments = expand(workout);
-  const clock = useIntervalClock(segments);
+  const schedule = useSchedule(segments);
+  const athlete = useAthletePointer({
+    athleteIndex: snapshot.athleteIndex,
+    athleteSegmentStartedAtMs: snapshot.athleteSegmentStartedAtMs,
+  });
 
-  // Auto-start on mount at the elapsed time the start timestamp implies
-  // (0 for a fresh run; mid-timeline — or straight to done — for a restore).
+  // Auto-start the schedule ghost on mount at the elapsed time the start
+  // timestamp implies (0 for a fresh run; wherever the buzzer would be for
+  // a restore) — it never gates the athlete pointer, only informs the delta.
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    clock.start((Date.now() - startedAtMs) / 1000);
-  }, [clock, startedAtMs]);
+    schedule.start((Date.now() - snapshot.startedAtMs) / 1000);
+  }, [schedule, snapshot.startedAtMs]);
 
-  const running = clock.status === 'running';
-  useWakeLock(running);
+  const running = schedule.status === 'running';
+  const [done, setDone] = useState(false);
+  useWakeLock(running && !done);
 
-  const current = segments[clock.segmentIndex];
-  const next = segments[clock.segmentIndex + 1];
+  const current = segments[athlete.athleteIndex];
+  const next = segments[athlete.athleteIndex + 1];
   const station = stationOf(current);
   const pace = station ? paceLabel(station.pace) : null;
 
-  // Start tone / transition cue when the active segment changes.
-  const prevIndex = useRef<number | null>(null);
+  // Ghost's own transition — an ambient pace beacon, independent of the
+  // athlete's progress.
+  const prevScheduleIndex = useRef<number | null>(null);
   useEffect(() => {
     if (!running) {
-      prevIndex.current = null;
+      prevScheduleIndex.current = null;
       return;
     }
     if (
-      prevIndex.current !== null &&
-      prevIndex.current !== clock.segmentIndex
+      prevScheduleIndex.current !== null &&
+      prevScheduleIndex.current !== schedule.scheduleIndex
     ) {
-      cues.start();
+      cues.beacon();
     }
-    prevIndex.current = clock.segmentIndex;
-  }, [running, clock.segmentIndex, cues]);
+    prevScheduleIndex.current = schedule.scheduleIndex;
+  }, [running, schedule.scheduleIndex, cues]);
 
-  // 3-2-1 countdown beeps in the final seconds of a segment.
+  // 3-2-1 lead-in to the *schedule's* next transition, not the athlete's.
   const lastBeep = useRef('');
   useEffect(() => {
     if (!running) return;
-    const r = clock.segmentRemaining;
+    const r = schedule.scheduleRemaining;
     if (r >= 1 && r <= 3) {
-      const tag = `${clock.segmentIndex}:${r}`;
+      const tag = `${schedule.scheduleIndex}:${r}`;
       if (lastBeep.current !== tag) {
         lastBeep.current = tag;
         cues.countdown();
       }
     }
-  }, [running, clock.segmentIndex, clock.segmentRemaining, cues]);
+  }, [running, schedule.scheduleIndex, schedule.scheduleRemaining, cues]);
 
-  // Circuit checklist: a per-segment memory aid, never a gate — the clock
-  // ends the segment regardless, and every new segment starts unchecked.
+  // Circuit checklist: a per-segment memory aid, never a gate — the whole
+  // station still only advances on the "Done" tap below, and every new
+  // segment starts unchecked.
   const [checked, setChecked] = useState<ReadonlySet<number>>(new Set());
   useEffect(() => {
     setChecked(new Set());
-  }, [clock.segmentIndex]);
+  }, [athlete.athleteIndex]);
   const togglePart = (i: number) => {
     setChecked((prev) => {
       const next = new Set(prev);
@@ -123,36 +148,76 @@ export default function EmomPlayer({
     });
   };
 
-  // Soft pacing tick at whole minutes inside circuit segments only — the
-  // loud start beep and 3-2-1 stay reserved for segment boundaries. Keyed on
-  // the minute *number* (not an exact elapsed value) so a dropped or
-  // coalesced render never swallows a tick, and a throttled tab that jumps
-  // forward re-syncs with a single tick for the current minute.
+  // Soft pacing tick at whole minutes on the athlete's own current station —
+  // circuits only, same as before, just keyed off the athlete's own time
+  // rather than the old gating segment clock.
   const lastTick = useRef('');
   useEffect(() => {
     if (!running || !station?.circuit) return;
-    const minute = Math.floor(clock.segmentElapsed / 60);
+    const minute = Math.floor(athlete.athleteSegmentElapsed / 60);
     if (minute >= 1) {
-      const tag = `${clock.segmentIndex}:${minute}`;
+      const tag = `${athlete.athleteIndex}:${minute}`;
       if (lastTick.current !== tag) {
         lastTick.current = tag;
         cues.tick();
       }
     }
-  }, [running, clock.segmentIndex, clock.segmentElapsed, station, cues]);
+  }, [running, athlete.athleteIndex, athlete.athleteSegmentElapsed, station, cues]);
 
-  // End-of-workout: flourish + a single onComplete call, guarded against
-  // re-firing on re-render.
-  const completedFired = useRef(false);
-  useEffect(() => {
-    if (clock.status !== 'done' || completedFired.current) return;
-    completedFired.current = true;
+  // Fire-once guard: finish() can only be reached from the "Done" tap on the
+  // final segment.
+  const finishedRef = useRef(false);
+  const finish = () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    schedule.pause();
+    athlete.pause();
     cues.finish();
-    onComplete?.();
-  }, [clock.status, onComplete, cues]);
+    onComplete?.(schedule.scheduleElapsed);
+    setDone(true);
+  };
 
-  // ── Done ────────────────────────────────────────────────────────────────
-  if (clock.status === 'done') {
+  const handleDone = () => {
+    if (done) return;
+    if (athlete.athleteIndex + 1 >= segments.length) {
+      finish();
+    } else {
+      cues.start();
+      athlete.advance();
+    }
+  };
+
+  const handlePauseRun = () => {
+    schedule.pause();
+    athlete.pause();
+  };
+  const handleResumeRun = () => {
+    schedule.resume();
+    athlete.resume();
+  };
+
+  // Persist in-run state on every mutation; the parent clears it on finish,
+  // so stop writing once the run is done.
+  const persistable = !done;
+  useEffect(() => {
+    if (!persistable) return;
+    saveActiveRun({
+      mode: snapshot.mode,
+      slug: snapshot.slug,
+      startedAtMs: snapshot.startedAtMs,
+      runId: snapshot.runId,
+      athleteIndex: athlete.athleteIndex,
+      athleteSegmentStartedAtMs: athlete.athleteSegmentStartedAtMs,
+    });
+  }, [
+    persistable,
+    snapshot,
+    athlete.athleteIndex,
+    athlete.athleteSegmentStartedAtMs,
+  ]);
+
+  // ── Finished (athlete tapped through the final segment) ─────────────────
+  if (done) {
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
         <div aria-hidden="true" className="text-5xl">
@@ -160,7 +225,7 @@ export default function EmomPlayer({
         </div>
         <h2 className="text-2xl font-bold">{workout.title} complete</h2>
         <p className="text-fg-muted">
-          {mmss(clock.totalDuration)} of work done.
+          {mmss(schedule.scheduleElapsed)} elapsed.
         </p>
         <button
           type="button"
@@ -181,6 +246,11 @@ export default function EmomPlayer({
       ? (current.blockLabel ?? `Block ${current.blockIndex + 1}`)
       : undefined;
 
+  const nominalSec = current?.durationSec ?? 0;
+  const overNominal = athlete.athleteSegmentElapsed > nominalSec;
+  const delta =
+    schedule.startOf(athlete.athleteIndex + 1) - schedule.scheduleElapsed;
+
   return (
     <div className="flex flex-col items-center gap-6 py-6 text-center">
       <div className="flex items-center gap-3">
@@ -190,7 +260,7 @@ export default function EmomPlayer({
           {SEGMENT_LABELS[type]}
         </span>
         <span className="text-sm text-fg-muted">
-          {clock.segmentIndex + 1} / {segments.length}
+          {athlete.athleteIndex + 1} / {segments.length}
           {blockLabel ? ` · ${blockLabel}${round ? ` · rd ${round}` : ''}` : ''}
         </span>
       </div>
@@ -199,7 +269,24 @@ export default function EmomPlayer({
         aria-live="off"
         className={`tabular-nums text-[22vw] font-black leading-none sm:text-[12rem] ${SEGMENT_TEXT_CLASS[type]}`}
       >
-        {mmss(clock.segmentRemaining)}
+        {mmss(athlete.athleteSegmentElapsed)}
+      </div>
+      {nominalSec > 0 && (
+        <p className="-mt-4 text-sm text-fg-muted">
+          target {mmss(nominalSec)}
+          {overNominal ? ' · over' : ''}
+        </p>
+      )}
+
+      <div className="flex flex-col items-center gap-0.5">
+        <p
+          className={`text-sm font-bold ${delta < 0 ? 'text-behind' : 'text-fg-muted'}`}
+        >
+          {paceDeltaLabel(delta)}
+        </p>
+        <p className="text-xs text-fg-muted">
+          Schedule: station {schedule.scheduleIndex + 1} / {segments.length}
+        </p>
       </div>
 
       <div className="flex w-full flex-col items-center gap-1">
@@ -207,19 +294,19 @@ export default function EmomPlayer({
           station.circuit ? (
             <div className="flex w-full max-w-sm flex-col gap-1.5">
               {station.circuit.map((part, i) => {
-                const done = checked.has(i);
+                const partDone = checked.has(i);
                 return (
                   <button
                     key={i}
                     type="button"
                     onClick={() => togglePart(i)}
-                    aria-pressed={done}
+                    aria-pressed={partDone}
                     className={`flex items-baseline justify-between gap-4 rounded-xl bg-bg-elevated px-4 py-3 text-left text-lg font-semibold transition-colors ${
-                      done ? 'text-fg-muted line-through' : ''
+                      partDone ? 'text-fg-muted line-through' : ''
                     }`}
                   >
                     <span>
-                      {done ? '✓ ' : ''}
+                      {partDone ? '✓ ' : ''}
                       {part.movement}
                     </span>
                     <span className="shrink-0 text-sm font-normal text-fg-muted">
@@ -249,11 +336,19 @@ export default function EmomPlayer({
         Next: <strong className="text-fg">{nextLabel(next)}</strong>
       </p>
 
+      <button
+        type="button"
+        onClick={handleDone}
+        className="w-full max-w-xs rounded-xl bg-work px-8 py-5 text-xl font-bold text-black transition-transform active:scale-[0.96]"
+      >
+        {type === 'break' ? 'Ready' : 'Done'}
+      </button>
+
       <div className="flex gap-3">
         {running ? (
           <button
             type="button"
-            onClick={clock.pause}
+            onClick={handlePauseRun}
             className="rounded-xl border border-border px-6 py-3 font-semibold"
           >
             Pause
@@ -261,10 +356,10 @@ export default function EmomPlayer({
         ) : (
           <button
             type="button"
-            onClick={clock.resume}
-            className="rounded-xl bg-work px-6 py-3 font-bold text-black"
+            onClick={handleResumeRun}
+            className="rounded-xl bg-bg-elevated px-6 py-3 font-bold"
           >
-            Resume
+            Resume run
           </button>
         )}
         <button

@@ -24,7 +24,6 @@ import {
 import { dailyPick } from './dailyPick';
 import AmrapPlayer from './AmrapPlayer';
 import EmomPlayer from './EmomPlayer';
-import { expand } from './expand';
 import FinishScreen, { type FinishedRun } from './FinishScreen';
 import RepPlayer from './RepPlayer';
 import { measureLabel, mmss } from './format';
@@ -39,9 +38,19 @@ function freshSnapshot(workout: Workout): ActiveRunSnapshot {
   const base = { slug: workout.slug, startedAtMs: Date.now() };
   switch (workout.mode) {
     case 'emom':
-      return { mode: 'emom', ...base };
+      return {
+        mode: 'emom',
+        ...base,
+        athleteIndex: 0,
+        athleteSegmentStartedAtMs: base.startedAtMs,
+      };
     case 'interval':
-      return { mode: 'interval', ...base };
+      return {
+        mode: 'interval',
+        ...base,
+        athleteIndex: 0,
+        athleteSegmentStartedAtMs: base.startedAtMs,
+      };
     case 'amrap':
       return { mode: 'amrap', ...base, rounds: 0 };
     case 'rep':
@@ -112,11 +121,12 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
     setFinished({ slug: w.slug, title: w.title, runId, result });
   };
 
-  // Clock-paced (emom, interval): the timeline defines the duration.
-  const handleClockComplete = (w: EmomWorkout | IntervalWorkout) => {
-    const durationSec = expand(w).reduce((acc, s) => acc + s.durationSec, 0);
+  // Clock-paced (emom, interval): the athlete's real elapsed time is the
+  // duration now — the schedule's nominal total is only a pace reference,
+  // the run can legitimately finish earlier or later than it.
+  const handleClockComplete = (w: EmomWorkout | IntervalWorkout, elapsedSec: number) => {
     finishRun(w, {
-      durationSec,
+      durationSec: elapsedSec,
       totalReps: null,
       breaks: null,
       completedAll: true,
@@ -204,9 +214,9 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
       return (
         <EmomPlayer
           workout={w}
-          startedAtMs={active.startedAtMs}
+          snapshot={active}
           cues={cues.current}
-          onComplete={() => handleClockComplete(w)}
+          onComplete={(elapsedSec) => handleClockComplete(w, elapsedSec)}
           onExit={handleExit}
         />
       );
