@@ -249,7 +249,7 @@ export default function WorkoutPlayer({ onActivity }: WorkoutPlayerProps) {
   return (
     <div className="flex flex-col gap-6">
       {workouts.length > 1 && (
-        <label className="flex flex-col gap-1.5">
+        <label className="flex flex-col gap-1.5 overflow-hidden">
           <span className="text-sm font-semibold text-fg-muted">
             Choose a workout
           </span>
