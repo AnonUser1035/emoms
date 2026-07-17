@@ -21,10 +21,11 @@ interface FinishScreenProps {
 
 /**
  * The single hand-off point from a finished run to the shared record: shows
- * the summary, asks for a whiteboard name exactly once ever (declining is
- * remembered), takes optional notes, and posts the completion event. The run
- * completes on the server whether or not a name is given — a nameless run
- * counts on the heatmap but stays off the whiteboard.
+ * the summary, asks for a whiteboard name on every finish (pre-filled with
+ * whatever was used last on this device), takes optional notes, and posts
+ * the completion event. The run completes on the server whether or not a
+ * name is given — a nameless run counts on the heatmap but stays off the
+ * whiteboard.
  */
 export default function FinishScreen({
   run,
@@ -32,7 +33,7 @@ export default function FinishScreen({
   onDone,
 }: FinishScreenProps) {
   const [identity] = useState(() => getIdentity());
-  const [nameInput, setNameInput] = useState('');
+  const [nameInput, setNameInput] = useState(identity.name ?? '');
   const [notes, setNotes] = useState('');
   const [posting, setPosting] = useState(false);
 
@@ -45,13 +46,9 @@ export default function FinishScreen({
   const handleFinish = async () => {
     if (posting) return;
     setPosting(true);
-    let name = identity.name;
-    if (!identity.asked) {
-      // First finish on this device: record the answer either way so the
-      // prompt never re-appears ('' = declined).
-      setAthleteName(nameInput);
-      name = nameInput.trim() ? nameInput.trim() : null;
-    }
+    const trimmed = nameInput.trim();
+    setAthleteName(trimmed);
+    const name = trimmed ? trimmed : null;
     await completeRun(
       run.runId,
       run.slug,
@@ -81,16 +78,14 @@ export default function FinishScreen({
       </div>
 
       <div className="flex w-full max-w-xs flex-col gap-2">
-        {!identity.asked && (
-          <input
-            type="text"
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-            placeholder="Your name (for the whiteboard)"
-            maxLength={40}
-            className="rounded-xl border border-border bg-bg-elevated px-4 py-3"
-          />
-        )}
+        <input
+          type="text"
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          placeholder="Your name (for the whiteboard)"
+          maxLength={40}
+          className="rounded-xl border border-border bg-bg-elevated px-4 py-3"
+        />
         <input
           type="text"
           value={notes}
@@ -109,9 +104,6 @@ export default function FinishScreen({
       >
         Finish
       </button>
-      {identity.name && (
-        <p className="text-xs text-fg-muted">Posting as {identity.name}</p>
-      )}
     </div>
   );
 }

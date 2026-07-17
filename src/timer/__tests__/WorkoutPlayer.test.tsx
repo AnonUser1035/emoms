@@ -233,7 +233,7 @@ describe('WorkoutPlayer', () => {
     expect(screen.getByRole('button', { name: /start/i })).toBeDefined();
   });
 
-  it('runs a rep workout end to end, capturing the whiteboard name once', async () => {
+  it('runs a rep workout end to end, prompting for the whiteboard name every finish', async () => {
     const onActivity = vi.fn();
     render(<WorkoutPlayer onActivity={onActivity} />);
 
@@ -245,8 +245,11 @@ describe('WorkoutPlayer', () => {
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
     fireEvent.click(screen.getByRole('button', { name: /target done/i }));
 
-    // Rep finish screen: summary + first-time name prompt.
+    // Rep finish screen: summary + name prompt, empty on a fresh device.
     expect(screen.getByText(/5 reps in/i)).toBeDefined();
+    expect(
+      (screen.getByPlaceholderText(/your name/i) as HTMLInputElement).value,
+    ).toBe('');
     fireEvent.change(screen.getByPlaceholderText(/your name/i), {
       target: { value: 'Ryan' },
     });
@@ -257,10 +260,11 @@ describe('WorkoutPlayer', () => {
     expect(onActivity).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: /start/i })).toBeDefined();
 
-    // Second finish must not re-prompt for a name.
+    // Second finish prompts again, pre-filled with the last name used.
     fireEvent.click(screen.getByRole('button', { name: /start/i }));
     fireEvent.click(screen.getByRole('button', { name: /target done/i }));
-    expect(screen.queryByPlaceholderText(/your name/i)).toBeNull();
-    expect(screen.getByText(/posting as ryan/i)).toBeDefined();
+    expect(
+      (screen.getByPlaceholderText(/your name/i) as HTMLInputElement).value,
+    ).toBe('Ryan');
   });
 });

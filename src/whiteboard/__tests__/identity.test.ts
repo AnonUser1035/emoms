@@ -15,24 +15,32 @@ describe('whiteboard identity', () => {
     const first = getIdentity();
     expect(first.deviceId).toBeTruthy();
     expect(first.name).toBeNull();
-    expect(first.asked).toBe(false);
 
     const second = getIdentity();
     expect(second.deviceId).toBe(first.deviceId);
   });
 
-  it('remembers the athlete name once set', () => {
+  it('remembers the athlete name once set, as the default for next time', () => {
     setAthleteName('Ryan');
     const id = getIdentity();
     expect(id.name).toBe('Ryan');
-    expect(id.asked).toBe(true);
   });
 
-  it('records a decline as asked-but-anonymous', () => {
+  it('overwrites the stored name when a new one is submitted', () => {
+    setAthleteName('Ryan');
+    setAthleteName('Brian');
+    expect(getIdentity().name).toBe('Brian');
+  });
+
+  it('does not clear a stored name when a blank name is submitted', () => {
+    setAthleteName('Ryan');
     setAthleteName('');
-    const id = getIdentity();
-    expect(id.name).toBeNull();
-    expect(id.asked).toBe(true);
+    expect(getIdentity().name).toBe('Ryan');
+  });
+
+  it('stays anonymous when no name has ever been submitted', () => {
+    setAthleteName('');
+    expect(getIdentity().name).toBeNull();
   });
 
   it('trims and caps stored names', () => {

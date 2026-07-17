@@ -1,6 +1,4 @@
-# results-whiteboard
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Whiteboard identity is a name entered every finish, defaulted from the last one used
 The app SHALL prompt for the athlete's display name on every completed workout, pre-filled with the name last used on that device (if any), alongside a generated stable device id attached to every run event. The athlete MAY edit or clear the pre-filled name before posting. There SHALL be no accounts, passwords, or server-side identity verification.
@@ -20,21 +18,3 @@ The app SHALL prompt for the athlete's display name on every completed workout, 
 #### Scenario: Declining a name still counts the run and does not clear the stored default
 - **WHEN** the athlete clears the name field and submits blank
 - **THEN** the run still completes (and counts toward the heatmap) but carries no whiteboard name for that run, and the next finish still pre-fills with the last non-blank name used on the device
-
-### Requirement: Completed runs with a name appear on the workout's whiteboard
-The Worker SHALL list completed runs per workout slug — name, date, elapsed time, total reps, breaks, completed flag, and notes — newest first, and the app SHALL show this board on the workout's idle screen. Nameless runs SHALL be excluded from the board.
-
-#### Scenario: Board shows a posted result
-- **WHEN** Brian completes the 300-pushup workout at the 35-minute cap with 276 reps
-- **THEN** the 300-pushup workout's board lists "Brian — 276 reps, 35:00" with the date
-
-#### Scenario: Nameless run excluded
-- **WHEN** a run completes without a whiteboard name
-- **THEN** it contributes to the heatmap but does not appear on any board
-
-### Requirement: Results carry measured fields plus free-text notes
-A posted result SHALL include the player-measured summary and MAY include a short free-text note (e.g., heart rate, load used) entered on the finish screen. The Worker SHALL store notes verbatim with a length limit.
-
-#### Scenario: Note attached to a result
-- **WHEN** the athlete finishes the chipper in 28:30 and adds the note "144 hr, 50 lb goblet"
-- **THEN** the board entry shows the time with that note
