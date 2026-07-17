@@ -37,7 +37,7 @@ const descChipperPenalties: RepWorkout = {
   ],
 };
 
-// 3) 14-2-14 ladder by twos; 50 Russian twists after every round (see summary).
+// 3) 14-2-14 ladder by twos; 50 Russian twists after every round.
 const scheme14 = [...range(7, 1).map((n) => n * 2), ...range(2, 7).map((n) => n * 2)];
 const ladder14: RepWorkout = {
   mode: 'rep',
@@ -46,9 +46,10 @@ const ladder14: RepWorkout = {
   title: '14-2-14 Ladder · Burpees & Press',
   summary:
     'Burpees and military press descending 14 to 2 by twos then back up to 14, with 50 Russian twists (25 lb) after every round.',
-  targets: ladder(scheme14, [
-    { movement: 'Burpees' },
-    { movement: 'Military press', load: '40 lb' },
+  targets: scheme14.flatMap((count) => [
+    { movement: 'Burpees', count },
+    { movement: 'Military press', count, load: '40 lb' },
+    { movement: 'Russian twists', count: 50, load: '25 lb' },
   ]),
 };
 
@@ -173,7 +174,7 @@ const pyr202goblet: RepWorkout = {
   ]),
 };
 
-// 11) 5 rounds for time, plus a bear-crawl finisher (see summary).
+// 11) 5 rounds for time, plus a bear-crawl finisher.
 const superset5rft: RepWorkout = {
   mode: 'rep',
   slug: 'rep-5rft-split-squat-press',
@@ -181,13 +182,16 @@ const superset5rft: RepWorkout = {
   title: '5 Rounds · Split-Squat Press',
   summary:
     'Five rounds for time of split-squat press, renegade rows, swings, and skater hops, finishing with a 4-minute bear crawl.',
-  targets: rounds(5, [
-    { movement: 'Split-squat press', count: 10, load: '30 lb', notes: 'each side, 20 total' },
-    { movement: 'Renegade row with pushup', count: 10, load: '40 lb' },
-    { movement: 'Kneeling curl-press-extension', count: 10, load: '40 lb' },
-    { movement: 'Skier swings', count: 30, load: '30 lb' },
-    { movement: 'Skater hops', count: 30, load: '35 lb' },
-  ]),
+  targets: [
+    ...rounds(5, [
+      { movement: 'Split-squat press', count: 10, load: '30 lb', notes: 'each side, 20 total' },
+      { movement: 'Renegade row with pushup', count: 10, load: '40 lb' },
+      { movement: 'Kneeling curl-press-extension', count: 10, load: '40 lb' },
+      { movement: 'Skier swings', count: 30, load: '30 lb' },
+      { movement: 'Skater hops', count: 30, load: '35 lb' },
+    ]),
+    { movement: 'Bear crawl', count: 1, notes: '4 minutes, finisher' },
+  ],
 };
 
 // 12) 3 rounds with jump rope after each exercise (60 / 40 / 20 by round).
@@ -640,7 +644,7 @@ const descChipper100: RepWorkout = {
   ],
 };
 
-// 37) 50-10 pyramid; 10 pushups after each round (see summary).
+// 37) 50-10 pyramid; 10 pushups after each round.
 const pyr5010: RepWorkout = {
   mode: 'rep',
   slug: 'rep-50-10-pyramid',
@@ -648,10 +652,11 @@ const pyr5010: RepWorkout = {
   title: '50-10 Pyramid',
   summary:
     'Pushups, alternating snatches, and situps descending 50/40/30/20/10, with 10 pushups after each round.',
-  targets: ladder(range(5, 1).map((n) => n * 10), [
-    { movement: 'Pushups' },
-    { movement: 'Alternating DB snatches', load: '50 lb' },
-    { movement: 'Situps' },
+  targets: range(5, 1).map((n) => n * 10).flatMap((count) => [
+    { movement: 'Pushups', count },
+    { movement: 'Alternating DB snatches', count, load: '50 lb' },
+    { movement: 'Situps', count },
+    { movement: 'Pushups', count: 10, notes: 'finisher, after every round' },
   ]),
 };
 

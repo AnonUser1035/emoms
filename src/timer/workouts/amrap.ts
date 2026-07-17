@@ -120,9 +120,9 @@ const amrapClimbSix: AmrapWorkout = {
   mode: 'amrap',
   slug: 'amrap-climb-six',
   origin: 'original',
-  title: 'AMRAP · Six-Move Climb',
+  title: 'AMRAP · Six-Move Circuit',
   summary:
-    'Thirty-minute AMRAP over six movements — squats, curl-press-extension, lunges, rows, press, and dive-bombers — climbing the reps as you go.',
+    'Thirty-minute AMRAP over six movements — squats, curl-press-extension, lunges, rows, press, and dive-bombers — ten reps each, count your rounds.',
   capMin: 30,
   round: [
     { movement: 'Rack squats', count: 10 },

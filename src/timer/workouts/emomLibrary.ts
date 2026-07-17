@@ -6,7 +6,7 @@
 // A handful of log entries gave reps/loads but no duration — those are modeled
 // as a representative 5 rounds and flagged in their summary.
 
-import type { CircuitPart, EmomWorkout, Measure, Station } from './types';
+import type { Block, CircuitPart, EmomWorkout, Measure, Station } from './types';
 
 // ── Small authoring helpers ────────────────────────────────────────────────
 const reps = (count: number): Measure => ({ kind: 'reps', count });
@@ -157,7 +157,7 @@ const ballisticRowsKb: EmomWorkout = {
     'Five rounds of six kettlebell stations — ballistic rows, bottoms-up squats, swings, curls, pullovers, and max pushups.',
   blocks: [
     {
-      durationMin: 35,
+      durationMin: 30,
       intervalSec: 60,
       stations: [
         st('Ballistic rows', reps(20), '28 kg'),
@@ -300,6 +300,28 @@ const boxJumpThruster: EmomWorkout = {
 };
 
 // ── 10 ── 36-min ascending: goblet / swing / thruster ───────────────────────
+// Reps actually climb each round rather than living only in a text note: one
+// 3-minute block per round, each with that round's real counts baked in.
+const gobletSwingRound = (
+  goblet: number,
+  swing: number,
+  thruster: number,
+): Block => ({
+  durationMin: 3,
+  intervalSec: 60,
+  stations: [
+    st('Goblet squats', reps(goblet)),
+    st('KB swings', reps(swing)),
+    st('Thrusters', reps(thruster)),
+  ],
+});
+// One 4-rung climb (8/10/6 up to 14/25/12), three times through.
+const gobletSwingClimb: [number, number, number][] = [
+  [8, 10, 6],
+  [10, 15, 8],
+  [12, 20, 10],
+  [14, 25, 12],
+];
 const climbingGobletSwing: EmomWorkout = {
   mode: 'emom',
   slug: 'emom-36-climbing-goblet-swing-thruster',
@@ -307,17 +329,9 @@ const climbingGobletSwing: EmomWorkout = {
   title: 'EMOM 36 · Climbing Goblet, Swing, Thruster',
   summary:
     'Reps climb each round (goblet squats +2, swings +5, thrusters +2) — from 8/10/6 up to 14/25/12, three times through.',
-  blocks: [
-    {
-      durationMin: 36,
-      intervalSec: 60,
-      stations: [
-        st('Goblet squats', reps(8), undefined, 'climbs +2 each round to 14'),
-        st('KB swings', reps(10), undefined, 'climbs +5 each round to 25'),
-        st('Thrusters', reps(6), undefined, 'climbs +2 each round to 12'),
-      ],
-    },
-  ],
+  blocks: Array.from({ length: 3 }, () => gobletSwingClimb)
+    .flat()
+    .map(([goblet, swing, thruster]) => gobletSwingRound(goblet, swing, thruster)),
 };
 
 // ── 11 ── E2M dumbbell complex ───────────────────────────────────────────────
@@ -355,11 +369,11 @@ const kbThen12Min: EmomWorkout = {
   origin: 'original',
   title: 'EMOM · Kettlebell E3M then 12',
   summary:
-    'Five rounds of a 3-minute kettlebell circuit, a 2-minute break, then a 12-minute pushup-clean-press and snatch EMOM.',
+    'A 3-minute kettlebell circuit and a 2-minute break, five times through, then a 12-minute pushup-clean-press and snatch EMOM.',
   blocks: [
     {
       label: 'E3M · 5 rounds',
-      durationMin: 15,
+      durationMin: 25,
       intervalSec: 180,
       stations: [
         circuit('KB circuit', [
@@ -368,8 +382,8 @@ const kbThen12Min: EmomWorkout = {
           cp('KB deadlift', reps(10)),
           cp('Pushup burpee', reps(5)),
         ]),
+        rest(120),
       ],
-      then: [{ kind: 'break', seconds: 120 }],
     },
     {
       label: '12-min EMOM',
@@ -571,9 +585,14 @@ const kbComplexAlternating: EmomWorkout = {
             cp('Swings', reps(3)),
             cp('High pulls', reps(2)),
             cp('Snatch', reps(1)),
+            cp('Swings', reps(3)),
+            cp('High pulls', reps(2)),
+            cp('Snatch', reps(1)),
+            cp('Swings', reps(3)),
+            cp('High pulls', reps(2)),
+            cp('Snatch', reps(1)),
           ],
           '20 kg',
-          '3 rounds of the complex',
         ),
         circuit(
           'Complex ×2',
@@ -581,9 +600,11 @@ const kbComplexAlternating: EmomWorkout = {
             cp('Swings', reps(3)),
             cp('High pulls', reps(2)),
             cp('Snatch', reps(1)),
+            cp('Swings', reps(3)),
+            cp('High pulls', reps(2)),
+            cp('Snatch', reps(1)),
           ],
           '20 kg',
-          '2 rounds of the complex',
         ),
       ],
     },
@@ -705,6 +726,21 @@ const thrusterBurpeeLunge: EmomWorkout = {
 };
 
 // ── 24 ── 30-min ascending kettlebell rotation ──────────────────────────────
+// Reps actually climb each round rather than living only in a text note: one
+// 3-minute block per round, each with that round's real counts baked in.
+const climbingKbRound = (
+  goblet: number,
+  swing: number,
+  thruster: number,
+): Block => ({
+  durationMin: 3,
+  intervalSec: 60,
+  stations: [
+    st('KB goblet squats', reps(goblet), '16–20 kg'),
+    st('KB overhead swings', reps(swing), '16–20 kg'),
+    st('KB thrusters', reps(thruster), '16–20 kg'),
+  ],
+});
 const climbingKb: EmomWorkout = {
   mode: 'emom',
   slug: 'emom-30-climbing-kb',
@@ -712,17 +748,9 @@ const climbingKb: EmomWorkout = {
   title: 'EMOM 30 · Climbing Kettlebell',
   summary:
     'Ten rounds with reps climbing each round — goblet squats +1, overhead swings +2, thrusters +1, at 16–20 kg.',
-  blocks: [
-    {
-      durationMin: 30,
-      intervalSec: 60,
-      stations: [
-        st('KB goblet squats', reps(8), '16 kg', '+1 each round; 16–20 kg'),
-        st('KB overhead swings', reps(10), '16 kg', '+2 each round; 16–20 kg'),
-        st('KB thrusters', reps(6), '16 kg', '+1 each round; 16–20 kg'),
-      ],
-    },
-  ],
+  blocks: Array.from({ length: 10 }, (_, i) =>
+    climbingKbRound(8 + i, 10 + i * 2, 6 + i),
+  ),
 };
 
 // ── 25 ── E3M dumbbell clean complex ─────────────────────────────────────────
